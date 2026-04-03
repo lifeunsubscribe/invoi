@@ -652,7 +652,7 @@ function MonthlyReportPDF({ config, weekData, monthLabel, signatureFont, themeId
 }
 
 // ── SHELL ─────────────────────────────────────────────────────────────────
-function Shell({ config, title, subtitle, onBack, emailConfigured, onOpenEmailSetup, children }) {
+function Shell({ config, title, subtitle, onBack, children }) {
   return (
     <div style={{height:"100vh",display:"flex",flexDirection:"column",background:chrome.titleBar,overflow:"hidden"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Dancing+Script:wght@400;700&family=Great+Vibes&family=Sacramento&family=Pacifico&family=Satisfy&display=swap');*{box-sizing:border-box}.day-row:hover{background:#fbeee8!important}.tmpl-btn,.bsm{transition:all 0.15s}.tmpl-btn:hover,.bsm:hover{opacity:0.85}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#d0c0b8;border-radius:3px}@keyframes pulse-glow{0%,100%{box-shadow:0 0 0 0 ${tint(config.accent,0.4)}}50%{box-shadow:0 0 0 6px ${tint(config.accent,0)}}}`}</style>
@@ -660,22 +660,7 @@ function Shell({ config, title, subtitle, onBack, emailConfigured, onOpenEmailSe
         <button onClick={onBack||undefined} style={{fontSize:15,color:chrome.mutedText,background:"none",border:`1px solid ${onBack?chrome.border:"transparent"}`,borderRadius:6,padding:"5px 12px",cursor:onBack?"pointer":"default",visibility:onBack?"visible":"hidden"}}>← Back</button>
         <span style={{fontSize:14,letterSpacing:3,textTransform:"uppercase",color:config.accent,display:"flex",alignItems:"center",gap:6}}><span>♥</span> {title}</span>
         {subtitle && <><div style={{width:1,height:14,background:chrome.border}}/><span style={{fontSize:16,color:chrome.brightText}}>{subtitle}</span></>}
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-        {onOpenEmailSetup && emailConfigured === false && (
-          <button onClick={onOpenEmailSetup}
-            style={{fontSize:14,fontWeight:700,color:"#fff",background:config.accent,border:"none",borderRadius:20,padding:"6px 15px",cursor:"pointer",display:"flex",alignItems:"center",gap:5,animation:"pulse-glow 2s ease-in-out infinite"}}>
-            <span style={{fontSize:16}}>✉</span> Set Up Email
-          </button>
-        )}
-        {onOpenEmailSetup && emailConfigured === true && (
-          <button onClick={onOpenEmailSetup}
-            style={{fontSize:13,color:"#c0b0a4",background:"none",border:`1px solid ${chrome.border}`,borderRadius:20,padding:"5px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:4,opacity:0.85,transition:"opacity 0.15s"}}
-            onMouseEnter={e=>e.currentTarget.style.opacity="1"}
-            onMouseLeave={e=>e.currentTarget.style.opacity="0.7"}>
-            <span style={{fontSize:14}}>✉</span> Email Settings
-          </button>
-        )}
-        </div>
+
       </div>
       {children}
     </div>
@@ -683,7 +668,7 @@ function Shell({ config, title, subtitle, onBack, emailConfigured, onOpenEmailSe
 }
 
 // ── NOTIFICATION CARD ─────────────────────────────────────────────────────
-function NotifCard({ notification, onDismiss, onOpenEmailSetup, accent }) {
+function NotifCard({ notification, onDismiss, accent }) {
   // Handle partial success: PDF saved but email failed
   if (notification.saved && notification.emailError) {
     const isCredentialError = notification.emailError.includes('.env') || notification.emailError.includes('not found');
@@ -704,12 +689,6 @@ function NotifCard({ notification, onDismiss, onOpenEmailSetup, accent }) {
               : <><strong>Email error:</strong> {notification.emailError}</>
             }
           </div>
-          {isCredentialError && onOpenEmailSetup && (
-            <button onClick={onOpenEmailSetup}
-              style={{marginTop:10,fontSize:13,fontWeight:700,color:"#fff",background:accent,border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",width:"100%"}}>
-              Set Up Email Now
-            </button>
-          )}
         </div>
       </div>
     );
@@ -752,7 +731,7 @@ function NotifCard({ notification, onDismiss, onOpenEmailSetup, accent }) {
 }
 
 // ── LANDING ───────────────────────────────────────────────────────────────
-function LandingPage({ config, onNav, emailConfigured, onOpenEmailSetup }) {
+function LandingPage({ config, onNav }) {
   const acc  = config.accent;
   const week = getWeekRange(0);
   const now  = new Date();
@@ -765,7 +744,7 @@ function LandingPage({ config, onNav, emailConfigured, onOpenEmailSetup }) {
     { id:"profile", emoji:"👤", label:"Edit Profile",      desc:"Invoice & Custom Settings",     primary:false },
   ];
   return (
-    <Shell config={config} title={getOccLabels(config).invoiceTitle} subtitle={config.name} emailConfigured={emailConfigured} onOpenEmailSetup={onOpenEmailSetup}>
+    <Shell config={config} title={getOccLabels(config).invoiceTitle} subtitle={config.name}>
       <style>{`
         .landing-cards{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:520px}
         @media(min-width:700px){.landing-cards{display:grid;grid-template-columns:1fr 1fr;max-width:760px;gap:16px}}
@@ -804,7 +783,7 @@ function LandingPage({ config, onNav, emailConfigured, onOpenEmailSetup }) {
 }
 
 // ── PROFILE PAGE ──────────────────────────────────────────────────────────
-function ProfilePage({ config, onSave, onBack, scrollToFolder, emailConfigured, onOpenEmailSetup }) {
+function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
   const [draft, setDraft] = useState(()=>{
     // Ensure clients array exists in draft
     const d = {...config};
@@ -939,7 +918,7 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder, emailConfigured, 
   const sectionTitleStyle = {fontSize:11,letterSpacing:3,textTransform:"uppercase",color:acc,marginBottom:4,fontWeight:700};
 
   return (
-    <Shell config={draft} title="Edit Profile" onBack={onBack} emailConfigured={emailConfigured} onOpenEmailSetup={onOpenEmailSetup}>
+    <Shell config={draft} title="Edit Profile" onBack={onBack}>
       <div style={{flex:1,overflowY:"auto",background:"#f9f3ee",padding:"28px 16px 32px"}}>
         <div style={{width:"100%",maxWidth:480,margin:"0 auto"}}>
 
@@ -1242,7 +1221,7 @@ function handleSubmitResponse(data, savedPath, emails, setNotification, setAlrea
 }
 
 // ── WEEKLY PAGE ───────────────────────────────────────────────────────────
-function WeeklyPage({ config, onBack, emailConfigured, onOpenEmailSetup, emailSetupCount }) {
+function WeeklyPage({ config, onBack }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [showCalendar, setShowCalendar] = useState(false);
   const calBtnRef = useRef(null);
@@ -1312,11 +1291,6 @@ function WeeklyPage({ config, onBack, emailConfigured, onOpenEmailSetup, emailSe
       })
       .catch(() => {});
   },[weekOffset]);
-
-  // Clear stale "email failed" notification after email setup completes
-  useEffect(()=>{
-    if (emailSetupCount > 0 && notification?.emailError) setNotification(null);
-  },[emailSetupCount]);
 
   const totalHours = Object.values(hours).reduce((a,b)=>a+b,0);
   const totalPay   = (totalHours*config.rate).toFixed(2);
@@ -1511,7 +1485,7 @@ function WeeklyPage({ config, onBack, emailConfigured, onOpenEmailSetup, emailSe
   const weekLabel = isCurrent ? `${week.start} – ${week.end}` : weekOffset < 0 ? `${week.start} – ${week.end} (past)` : `${week.start} – ${week.end} (future)`;
 
   return (
-    <Shell config={config} title="Weekly Invoice" subtitle={weekLabel} onBack={onBack} emailConfigured={emailConfigured} onOpenEmailSetup={onOpenEmailSetup}>
+    <Shell config={config} title="Weekly Invoice" subtitle={weekLabel} onBack={onBack}>
       {showConfirm && <ConfirmModal savedPath={savedPath} onConfirm={doSaveInvoice} onCancel={()=>setShowConfirm(false)} accent={acc}/>}
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         {/* PDF */}
@@ -1651,7 +1625,7 @@ function WeeklyPage({ config, onBack, emailConfigured, onOpenEmailSetup, emailSe
             <div style={{flex:1}}/>
           </div>
           <div style={{flexShrink:0,borderTop:`1px solid ${acc}18`,background:"#fdf8f4"}}>
-            {notification && <div style={{padding:"10px 16px 0"}}><NotifCard notification={notification} onDismiss={()=>setNotification(null)} onOpenEmailSetup={onOpenEmailSetup} accent={acc}/></div>}
+            {notification && <div style={{padding:"10px 16px 0"}}><NotifCard notification={notification} onDismiss={()=>setNotification(null)} accent={acc}/></div>}
             <div style={{padding:"10px 16px 14px"}}>
               {submitStep === 1 ? (<>
                 <button onClick={handleSubmit} disabled={submitting||previewing} style={{width:"100%",fontSize:16,fontWeight:700,padding:"12px 0",borderRadius:9,border:"none",background:`linear-gradient(135deg,${acc},${acc}bb)`,color:"white",cursor:(submitting||previewing)?"wait":"pointer",boxShadow:`0 3px 14px ${tint(acc,0.35)}`,opacity:(submitting||previewing)?0.7:1}}>
@@ -1692,7 +1666,7 @@ function WeeklyPage({ config, onBack, emailConfigured, onOpenEmailSetup, emailSe
 }
 
 // ── MONTHLY PAGE ──────────────────────────────────────────────────────────
-function MonthlyPage({ config, onBack, emailConfigured, onOpenEmailSetup, emailSetupCount }) {
+function MonthlyPage({ config, onBack }) {
   const now = new Date();
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -1719,11 +1693,6 @@ function MonthlyPage({ config, onBack, emailConfigured, onOpenEmailSetup, emailS
   const isCurrentMonth = monthOffset === 0;
   const monthNavLabel = isCurrentMonth ? "This month" : monthOffset === -1 ? "1m ago" : monthOffset < 0 ? `${Math.abs(monthOffset)}m ago` : `+${monthOffset}m`;
   const savedPath   = monthlyPath(config.saveFolder, year, month);
-
-  // Clear stale "email failed" notification after email setup completes
-  useEffect(()=>{
-    if (emailSetupCount > 0 && notification?.emailError) setNotification(null);
-  },[emailSetupCount]);
 
   // Scan weekly folder for each week's invoice when month changes
   useEffect(()=>{
@@ -1850,7 +1819,7 @@ function MonthlyPage({ config, onBack, emailConfigured, onOpenEmailSetup, emailS
   const LETTER_W=680, LETTER_H=Math.round(LETTER_W*(11/8.5));
 
   return (
-    <Shell config={config} title="Monthly Report" subtitle={isCurrentMonth ? monthLabel : monthOffset < 0 ? `${monthLabel} (past)` : `${monthLabel} (future)`} onBack={onBack} emailConfigured={emailConfigured} onOpenEmailSetup={onOpenEmailSetup}>
+    <Shell config={config} title="Monthly Report" subtitle={isCurrentMonth ? monthLabel : monthOffset < 0 ? `${monthLabel} (past)` : `${monthLabel} (future)`} onBack={onBack}>
       {showConfirm && <ConfirmModal savedPath={savedPath} onConfirm={doSend} onCancel={()=>setShowConfirm(false)} accent={acc}/>}
       {scanPopup   && <ScanPopup results={scanPopup} onClose={()=>setScanPopup(null)}/>}
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
@@ -1955,7 +1924,7 @@ function MonthlyPage({ config, onBack, emailConfigured, onOpenEmailSetup, emailS
             <div style={{flex:1}}/>
           </div>
           <div style={{flexShrink:0,borderTop:`1px solid ${acc}18`,background:"#fdf8f4"}}>
-            {notification && <div style={{padding:"10px 16px 0"}}><NotifCard notification={notification} onDismiss={()=>setNotification(null)} onOpenEmailSetup={onOpenEmailSetup} accent={acc}/></div>}
+            {notification && <div style={{padding:"10px 16px 0"}}><NotifCard notification={notification} onDismiss={()=>setNotification(null)} accent={acc}/></div>}
             <div style={{padding:"10px 16px 14px"}}>
               <button onClick={handleSubmit} disabled={submitting} style={{width:"100%",fontSize:16,fontWeight:700,padding:"12px 0",borderRadius:9,border:"none",background:`linear-gradient(135deg,${acc},${acc}bb)`,color:"white",cursor:submitting?"wait":"pointer",boxShadow:`0 3px 14px ${tint(acc,0.35)}`,opacity:submitting?0.7:1}}>
                 {submitting ? "Sending Report..." : "Generate & Send Report 📊"}
@@ -1969,195 +1938,6 @@ function MonthlyPage({ config, onBack, emailConfigured, onOpenEmailSetup, emailS
 }
 
 // ── ROOT ──────────────────────────────────────────────────────────────────
-// ── EMAIL SETUP MODAL ──────────────────────────────────────────────────
-function EmailSetupModal({ onDone, onSkip, isEditing }) {
-  const [gmailAddress, setGmailAddress] = useState("");
-  const [appPassword, setAppPassword] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [loadingExisting, setLoadingExisting] = useState(true);
-  const [alreadyVerified, setAlreadyVerified] = useState(false);
-  const [wantsToChange, setWantsToChange] = useState(false);
-
-  // Load existing email address and verification status on mount
-  useEffect(() => {
-    fetch(`${API_BASE}/api/email-status`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data) {
-          if (data.gmailAddress) setGmailAddress(data.gmailAddress);
-          if (data.configured) setAlreadyVerified(true);
-        }
-        setLoadingExisting(false);
-      })
-      .catch(() => setLoadingExisting(false));
-  }, []);
-
-  const handleSave = async () => {
-    // If already verified and user hasn't changed anything, just close
-    if (alreadyVerified && !wantsToChange) {
-      setSuccess("Email is already verified and ready to send.");
-      setTimeout(() => onDone(), 1000);
-      return;
-    }
-    if (!gmailAddress.trim()) { setError("Please enter your Gmail address."); return; }
-    if (!appPassword.trim()) { setError("Please enter your app password."); return; }
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const response = await fetch(`${API_BASE}/api/email-config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gmailAddress: gmailAddress.trim(), gmailAppPassword: appPassword.trim() })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Failed to save email settings.");
-      setSuccess("Connected successfully! Your email is ready to send invoices.");
-      setTimeout(() => onDone(), 1200);
-    } catch (e) {
-      setError(e.message);
-      setSaving(false);
-    }
-  };
-
-  const inputStyle = {
-    width:"100%",fontSize:15,padding:"10px 12px",borderRadius:8,
-    border:"1.5px solid #d8ccc4",fontFamily:"monospace",color:"#2c1810",
-    background:"white",outline:"none",boxSizing:"border-box"
-  };
-  const labelStyle = {fontSize:12,fontWeight:700,color:"#6a4a40",letterSpacing:0.5,marginBottom:5,display:"block"};
-
-  // Whether to show the full form (new setup, or user chose to change existing)
-  const showForm = !alreadyVerified || wantsToChange;
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(44,24,16,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:16}}>
-      <div style={{background:"white",borderRadius:18,maxWidth:440,width:"100%",overflow:"hidden",boxShadow:"0 12px 60px rgba(0,0,0,0.3)"}}>
-        {/* Header */}
-        <div style={{background:chrome.titleBar,padding:"20px 24px"}}>
-          <div style={{fontSize:11,letterSpacing:3,textTransform:"uppercase",color:"#e0c090",marginBottom:6}}>
-            {isEditing ? "Email Settings" : "Email Setup"}
-          </div>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,color:"#f0e0d0",fontWeight:700}}>
-            {isEditing ? "Email Settings" : "Set Up Email Sending"}
-          </div>
-          <div style={{fontSize:14,color:chrome.mutedText,marginTop:6,lineHeight:1.5}}>
-            {alreadyVerified && !wantsToChange
-              ? "Your email is connected and ready to send invoices."
-              : isEditing
-                ? "Update your Gmail address or app password below."
-                : "To send invoices by email, you need a Gmail address and an app password."}
-          </div>
-        </div>
-
-        {/* Body */}
-        <div style={{padding:"20px 24px"}}>
-          {loadingExisting ? (
-            <div style={{textAlign:"center",padding:"20px 0",color:"#9a8070",fontSize:14}}>Loading...</div>
-          ) : (<>
-            {/* Verified status badge */}
-            {alreadyVerified && !wantsToChange && (
-              <div style={{marginBottom:18}}>
-                <div style={{background:"#f0f8f2",border:"1px solid #b0d8b8",borderRadius:10,padding:"14px 16px",display:"flex",alignItems:"center",gap:10}}>
-                  <span style={{fontSize:23}}>✓</span>
-                  <div>
-                    <div style={{fontSize:15,fontWeight:700,color:"#2d6a2d",marginBottom:2}}>Email Verified</div>
-                    <div style={{fontSize:14,color:"#4a7a50",fontFamily:"monospace"}}>{gmailAddress}</div>
-                  </div>
-                </div>
-                <button onClick={()=>setWantsToChange(true)}
-                  style={{marginTop:10,fontSize:13,color:"#9a8070",background:"none",border:"1px dashed #d0c0b0",borderRadius:8,padding:"6px 14px",cursor:"pointer",width:"100%",transition:"all 0.15s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor="#8a6a5a";e.currentTarget.style.color="#6a4a40";}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor="#d0c0b0";e.currentTarget.style.color="#9a8070";}}>
-                  Change email or app password
-                </button>
-              </div>
-            )}
-
-            {showForm && (<>
-              {/* Gmail address */}
-              <div style={{marginBottom:16}}>
-                <label style={labelStyle}>Gmail Address</label>
-                <input
-                  type="email" placeholder="yourname@gmail.com" value={gmailAddress}
-                  onChange={e=>setGmailAddress(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-
-              {/* App password */}
-              <div style={{marginBottom:18}}>
-                <label style={labelStyle}>Gmail App Password</label>
-                <div style={{position:"relative"}}>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="xxxx xxxx xxxx xxxx" value={appPassword}
-                    onChange={e=>setAppPassword(e.target.value)}
-                    style={{...inputStyle,paddingRight:40}}
-                  />
-                  <button onClick={()=>setShowPassword(v=>!v)}
-                    style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#9a8070"}}>
-                    {showPassword ? "Hide" : "Show"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Instructions */}
-              <div style={{background:"#f9f3ee",border:"1px solid #e8ddd4",borderRadius:10,padding:"14px 16px",marginBottom:18}}>
-                <div style={{fontSize:13,fontWeight:700,color:"#4a3028",marginBottom:8}}>How to get a Gmail App Password:</div>
-                <ol style={{margin:0,paddingLeft:18,fontSize:13,color:"#6a4a40",lineHeight:1.8}}>
-                  <li>Go to <strong>myaccount.google.com</strong></li>
-                  <li>Click <strong>Security</strong> on the left sidebar</li>
-                  <li>Under "How you sign in to Google", make sure <strong>2-Step Verification</strong> is turned on</li>
-                  <li>Go back to Security, then click <strong>2-Step Verification</strong></li>
-                  <li>Scroll to the bottom and click <strong>App passwords</strong></li>
-                  <li>Enter a name (e.g. "Invoice Builder") and click <strong>Create</strong></li>
-                  <li>Copy the 16-character password and paste it above</li>
-                </ol>
-              </div>
-            </>)}
-
-            {/* Success */}
-            {success && (
-              <div style={{fontSize:13,color:"#2d6a2d",background:"#f0f8f2",border:"1px solid #b0d8b8",borderRadius:8,padding:"10px 12px",marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:17}}>✓</span> {success}
-              </div>
-            )}
-
-            {/* Error */}
-            {error && (
-              <div style={{fontSize:13,color:"#c4504f",background:"#fff5f2",border:"1px solid #f0c8b8",borderRadius:8,padding:"8px 12px",marginBottom:14,lineHeight:1.5}}>
-                {error}
-              </div>
-            )}
-
-            {/* Buttons */}
-            <div style={{display:"flex",gap:10}}>
-              {alreadyVerified && !wantsToChange ? (
-                <button onClick={onSkip}
-                  style={{flex:1,fontSize:14,fontWeight:700,padding:"11px 0",borderRadius:10,border:"none",background:chrome.titleBar,color:"white",cursor:"pointer"}}>
-                  Close
-                </button>
-              ) : (<>
-                <button onClick={onSkip} disabled={saving}
-                  style={{flex:1,fontSize:14,fontWeight:700,padding:"11px 0",borderRadius:10,border:"1.5px solid #e8ddd8",background:"white",color:"#9a8070",cursor:"pointer"}}>
-                  {isEditing ? "Cancel" : "Skip for Now"}
-                </button>
-                <button onClick={handleSave} disabled={saving || !!success}
-                  style={{flex:2,fontSize:14,fontWeight:700,padding:"11px 0",borderRadius:10,border:"none",background:chrome.titleBar,color:"white",cursor:saving?"wait":"pointer",opacity:(saving||!!success)?0.7:1}}>
-                  {saving ? "Verifying..." : success ? "Done!" : "Verify & Save"}
-                </button>
-              </>)}
-            </div>
-          </>)}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── AUTO-RESIZE TEXTAREA ──────────────────────────────────────────────────
 function makeTimestamp() {
@@ -2435,7 +2215,7 @@ function DailyLogPage({ config, onBack }) {
       shift: shiftRef.current, meds: medChecklistRef.current,
       clientId: activeClient.id || "",
     });
-    navigator.sendBeacon("/api/log", new Blob([body], {type: "application/json"}));
+    navigator.sendBeacon(`${API_BASE}/api/log`, new Blob([body], {type: "application/json"}));
   }, []);
 
   const handleBack = async () => { await flush(); onBack(); };
@@ -2664,7 +2444,7 @@ function DailyLogPage({ config, onBack }) {
     : sections;
 
   return (
-    <Shell config={config} title="Daily Service Log" subtitle={dateInfo.fullDate} onBack={handleBack} emailConfigured={null} onOpenEmailSetup={()=>{}}>
+    <Shell config={config} title="Daily Service Log" subtitle={dateInfo.fullDate} onBack={handleBack}>
       {showClearConfirm && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16}}>
           <div style={{background:"white",borderRadius:16,maxWidth:360,width:"100%",overflow:"hidden",boxShadow:"0 8px 48px rgba(0,0,0,0.25)"}}>
@@ -2967,126 +2747,7 @@ function DailyLogPage({ config, onBack }) {
   );
 }
 
-// ── REPORT A PROBLEM ─────────────────────────────────────────────────────
-function ReportModal({ onClose }) {
-  const [description, setDescription] = useState("");
-  const [sending, setSending] = useState(false);
-  const [result, setResult] = useState(null); // {success} or {error, report}
 
-  const handleSubmit = async () => {
-    if (!description.trim()) return;
-    setSending(true);
-    try {
-      const resp = await fetch(`${API_BASE}/api/report`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({description: description.trim()})
-      });
-      const data = await resp.json();
-      if (data.success) {
-        setResult({success: true});
-      } else if (data.report) {
-        // Email failed — offer clipboard fallback
-        setResult({error: data.error, report: data.report});
-      } else {
-        setResult({error: data.error || 'Failed to send report'});
-      }
-    } catch (e) {
-      setResult({error: 'Could not reach server'});
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleCopy = () => {
-    if (result?.report) {
-      navigator.clipboard.writeText(result.report).then(() => {
-        setResult(prev => ({...prev, copied: true}));
-      });
-    }
-  };
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif"}}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{background:"#faf6f2",borderRadius:12,padding:28,width:420,maxWidth:"90vw",maxHeight:"80vh",overflow:"auto",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div style={{fontSize:16,fontWeight:700,color:"#2c1810"}}>Report a Problem</div>
-          <button onClick={onClose} style={{fontSize:14,color:"#9a8070",background:"none",border:"none",cursor:"pointer"}}>✕</button>
-        </div>
-
-        {!result ? (
-          <>
-            <div style={{fontSize:13,color:"#7a6a5a",lineHeight:1.6,marginBottom:14}}>
-              Share any issues, ideas, or suggestions — we'd love to hear from you. Diagnostic logs and system info will be included automatically.
-            </div>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder={"How can we improve the app?\n\nExamples:\n• The app froze when I clicked Submit\n• A button isn't working the way I expected\n• It would be helpful if I could..."}
-              maxLength={5000}
-              style={{width:"100%",minHeight:140,padding:12,borderRadius:8,border:"1px solid #d8c8b8",background:"#fff",fontSize:13,color:"#2c1810",resize:"vertical",fontFamily:"inherit",lineHeight:1.5,boxSizing:"border-box"}}
-            />
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}>
-              <span style={{fontSize:11,color:"#b0a090"}}>{description.length}/5000</span>
-              <button
-                onClick={handleSubmit}
-                disabled={!description.trim() || sending}
-                style={{fontSize:13,fontWeight:700,color:"#fff",background:!description.trim()||sending?"#c0b0a0":"#7a6050",border:"none",borderRadius:8,padding:"8px 20px",cursor:!description.trim()||sending?"default":"pointer",opacity:!description.trim()?0.6:1}}>
-                {sending ? "Sending..." : "Send Report"}
-              </button>
-            </div>
-          </>
-        ) : result.success ? (
-          <div style={{textAlign:"center",padding:"20px 0"}}>
-            <div style={{fontSize:28,marginBottom:10}}>✓</div>
-            <div style={{fontSize:14,color:"#4a7a50",fontWeight:600,marginBottom:6}}>Report sent</div>
-            <div style={{fontSize:13,color:"#7a6a5a"}}>Thank you — this helps us improve the app.</div>
-            <button onClick={onClose}
-              style={{marginTop:16,fontSize:13,color:"#7a6050",background:"none",border:`1px solid #d8c8b8`,borderRadius:8,padding:"6px 16px",cursor:"pointer"}}>
-              Close
-            </button>
-          </div>
-        ) : (
-          <div>
-            <div style={{fontSize:13,color:"#8a5020",marginBottom:10}}>
-              Could not send automatically{result.error ? `: ${result.error}` : ''}
-            </div>
-            {result.report && (
-              <>
-                <div style={{fontSize:13,color:"#7a6a5a",marginBottom:8}}>
-                  Copy the report below and email it to us manually:
-                </div>
-                <textarea
-                  readOnly
-                  value={result.report}
-                  style={{width:"100%",minHeight:100,padding:10,borderRadius:8,border:"1px solid #d8c8b8",background:"#f5f0eb",fontSize:11,color:"#5a4a3a",fontFamily:"monospace",resize:"vertical",boxSizing:"border-box"}}
-                />
-                <button onClick={handleCopy}
-                  style={{marginTop:8,fontSize:13,fontWeight:600,color:"#fff",background:result.copied?"#6a9a70":"#7a6050",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",width:"100%"}}>
-                  {result.copied ? "Copied!" : "Copy to Clipboard"}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ReportButton({ onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      title="Report a problem or share feedback"
-      style={{position:"fixed",bottom:12,left:12,zIndex:9000,fontSize:12,color:"#a09080",background:"rgba(46,34,24,0.75)",border:"1px solid rgba(74,56,40,0.5)",borderRadius:20,padding:"5px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:5,backdropFilter:"blur(4px)",transition:"opacity 0.15s",opacity:0.6}}
-      onMouseEnter={e=>e.currentTarget.style.opacity="1"}
-      onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>
-      <span style={{fontSize:13}}>💬</span> Feedback
-    </button>
-  );
-}
 
 export default function App() {
   const [config, setConfig] = useState(defaultConfig);
@@ -3094,32 +2755,22 @@ export default function App() {
   const [scrollToFolder, setScrollToFolder] = useState(false);
   const [loading, setLoading] = useState(true);
   const [configError, setConfigError] = useState(null);
-  const [showEmailSetup, setShowEmailSetup] = useState(false);
-  const [emailConfigured, setEmailConfigured] = useState(null); // null=unknown, true/false
-  const [emailSetupCount, setEmailSetupCount] = useState(0); // increments on successful setup
-  const [showReport, setShowReport] = useState(false);
 
-  // Fetch config and email status on app mount
+  // Fetch config on app mount
   useEffect(() => {
     const abortController = new AbortController();
-
-    // Fetch both config and email status in parallel
-    Promise.all([
-      fetch(`${API_BASE}/api/config`, { signal: abortController.signal }).then(r => r.ok ? r.json() : Promise.reject(new Error('Config fetch failed'))),
-      fetch(`${API_BASE}/api/email-status`, { signal: abortController.signal }).then(r => r.ok ? r.json() : null).catch(() => null)
-    ])
-      .then(([configData, emailStatus]) => {
+    fetch(`${API_BASE}/api/config`, { signal: abortController.signal })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('Config fetch failed')))
+      .then(configData => {
         if (configData.rate != null) configData.rate = Number(configData.rate) || 0;
         setConfig({ ...defaultConfig, ...configData });
-        const configured = emailStatus ? emailStatus.configured : null;
-        setEmailConfigured(configured);
         setLoading(false);
       })
-      .catch(error => {
-        if (error.name === 'AbortError') return;
-        console.error('Config fetch failed, using defaults:', error);
-        setConfigError(error.message);
-        setLoading(false);
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          setConfigError('Unable to load configuration');
+          setLoading(false);
+        }
       });
     return () => abortController.abort();
   }, []);
@@ -3128,22 +2779,6 @@ export default function App() {
     if (dest==="profile-folder") { setScrollToFolder(true); setPage("profile"); }
     else { setScrollToFolder(false); setPage(dest); }
   };
-
-  const handleEmailSetupDone = () => {
-    setShowEmailSetup(false);
-    setEmailConfigured(true);
-    setEmailSetupCount(c => c + 1);
-  };
-
-  const handleEmailSetupSkip = () => {
-    setShowEmailSetup(false);
-    // emailConfigured stays false — pill button remains visible
-  };
-
-  const openEmailSetup = () => setShowEmailSetup(true);
-
-  // Shared props for email setup state
-  const emailProps = { emailConfigured, onOpenEmailSetup: openEmailSetup, emailSetupCount };
 
   // Show loading state while fetching config
   if (loading) {
@@ -3167,13 +2802,9 @@ export default function App() {
     </div>
   ) : null;
 
-  const emailModal = showEmailSetup ? <EmailSetupModal onDone={handleEmailSetupDone} onSkip={handleEmailSetupSkip} isEditing={emailConfigured === true}/> : null;
-
-  const reportUI = <><ReportButton onClick={()=>setShowReport(true)}/>{showReport && <ReportModal onClose={()=>setShowReport(false)}/>}</>;
-
-  if (page==="log")     return <>{ErrorBanner}{emailModal}{reportUI}<DailyLogPage config={config} onBack={()=>setPage("menu")}/></>;
-  if (page==="weekly")  return <>{ErrorBanner}{emailModal}{reportUI}<WeeklyPage  config={config} onBack={()=>setPage("menu")} {...emailProps}/></>;
-  if (page==="monthly") return <>{ErrorBanner}{emailModal}{reportUI}<MonthlyPage config={config} onBack={()=>setPage("menu")} {...emailProps}/></>;
-  if (page==="profile") return <>{ErrorBanner}{emailModal}{reportUI}<ProfilePage config={config} onSave={setConfig} onBack={()=>setPage("menu")} scrollToFolder={scrollToFolder} {...emailProps}/></>;
-  return <>{ErrorBanner}{emailModal}{reportUI}<LandingPage config={config} onNav={handleNav} {...emailProps}/></>;
+  if (page==="log")     return <>{ErrorBanner}<DailyLogPage config={config} onBack={()=>setPage("menu")}/></>;
+  if (page==="weekly")  return <>{ErrorBanner}<WeeklyPage  config={config} onBack={()=>setPage("menu")}/></>;
+  if (page==="monthly") return <>{ErrorBanner}<MonthlyPage config={config} onBack={()=>setPage("menu")}/></>;
+  if (page==="profile") return <>{ErrorBanner}<ProfilePage config={config} onSave={setConfig} onBack={()=>setPage("menu")} scrollToFolder={scrollToFolder}/></>;
+  return <>{ErrorBanner}<LandingPage config={config} onNav={handleNav}/></>;
 }

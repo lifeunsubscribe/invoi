@@ -1,13 +1,16 @@
 """
 PDF Generation Service
 
-Renders HTML invoice templates to PDF using ReportLab.
-Template registry is driven by backend/themes.py — add new themes there,
-not here. This module reads WEEKLY_TEMPLATE_FILES, MONTHLY_TEMPLATE_FILES,
-and LOG_TEMPLATE_FILES from themes.py automatically.
+Renders HTML invoice templates to PDF bytes.
+Ported from invoice-builder desktop app.
+
+Key changes from desktop version:
+- Returns bytes only (no filesystem writes — Lambda handler writes to S3)
+- WeasyPrint removed (no GTK dependency in Lambda)
+- Template paths relative to backend/templates/
 
 Functions:
-    render_weekly_pdf(config, hours, week, template_id)  -> bytes
+    render_weekly_pdf(config, hours, week, template_id) -> bytes
     render_monthly_pdf(config, week_data, month_label, ...) -> bytes
     render_weekly_log_pdf(config, client, daily_logs, ...) -> bytes
 """
@@ -15,8 +18,6 @@ Functions:
 import os
 from io import BytesIO
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 
 from backend.themes import (
     WEEKLY_TEMPLATE_FILES,
@@ -34,7 +35,7 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templat
 # ---------------------------------------------------------------------------
 
 def _get_jinja_env():
-    """Initialize and return a Jinja2 environment pointing at app/templates/."""
+    """Initialize and return a Jinja2 environment pointing at backend/templates/."""
     return Environment(
         loader=FileSystemLoader(TEMPLATE_DIR),
         autoescape=select_autoescape(['html', 'xml'])
@@ -102,30 +103,22 @@ def _calculate_monthly_totals(week_data, rate):
     return total_hours, f"{total_hours * rate:.2f}", weeks_worked
 
 
-def _render_to_pdf(html_content):
+def _render_html_to_pdf(html_content):
     """
-    Render an HTML string to PDF bytes via ReportLab.
+    Render HTML string to PDF bytes.
 
-    TODO: Implement full HTML-to-PDF rendering with ReportLab in Phase 2.
-    Currently returns a placeholder PDF with the HTML content reference.
+    TODO: Implement rendering pipeline in Phase 2.
+    The desktop app used WeasyPrint here — we need to either:
+    1. Use ReportLab's HTML-like rendering (more work but no native deps)
+    2. Use a headless browser in Lambda (Playwright/Puppeteer layer)
+    3. Use WeasyPrint in Lambda (requires a Lambda layer with GTK — possible but heavy)
 
-    Args:
-        html_content: str
-    Returns:
-        bytes
-    Raises:
-        OSError, RuntimeError
+    For now, raises NotImplementedError.
     """
-    try:
-        buf = BytesIO()
-        c = canvas.Canvas(buf, pagesize=letter)
-        c.drawString(72, 720, "PDF rendering placeholder — ReportLab implementation pending")
-        c.save()
-        return buf.getvalue()
-    except OSError as e:
-        raise OSError(f"I/O error rendering PDF: {e}") from e
-    except Exception as e:
-        raise RuntimeError(f"Failed to render PDF: {e}") from e
+    raise NotImplementedError(
+        "PDF rendering not yet implemented — Phase 2. "
+        "Needs ReportLab pipeline or WeasyPrint Lambda layer."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +181,7 @@ def render_weekly_pdf(config, hours, week, template_id):
             f"Failed to render template '{template_id}': {e}"
         ) from e
 
-    return _render_to_pdf(html_content)
+    return _render_html_to_pdf(html_content)
 
 
 def render_monthly_pdf(config, week_data, month_label,
@@ -248,7 +241,7 @@ def render_monthly_pdf(config, week_data, month_label,
             f"Failed to render monthly template '{template_id}': {e}"
         ) from e
 
-    return _render_to_pdf(html_content)
+    return _render_html_to_pdf(html_content)
 
 
 def render_weekly_log_pdf(config, client, daily_logs, week_label,
@@ -318,4 +311,4 @@ def render_weekly_log_pdf(config, client, daily_logs, week_label,
             f"Failed to render log template '{template_id}': {e}"
         ) from e
 
-    return _render_to_pdf(html_content)
+    return _render_html_to_pdf(html_content)

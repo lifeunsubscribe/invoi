@@ -1,9 +1,9 @@
 """
-app/themes.py — Theme Registry for Invoice Builder
+backend/themes.py — Theme Registry for Invoi
 
 Central source of truth for all template palettes and metadata.
 Used by:
-  - pdf_service.py  →  template file mapping + Jinja2 context injection
+  - backend/services/pdf_service.py  →  template file mapping + Jinja2 context injection
   - /api/themes     →  React frontend chrome theming (GET endpoint to expose)
   - Profile picker  →  display label, emoji, structure hint
 
@@ -16,10 +16,10 @@ Adding a new theme:
   1. Add entry to THEMES dict below
   2. Add theme ID to THEME_ORDER list
   3. Create template files:
-       app/templates/invoice_{id_underscored}.html
-       app/templates/invoice_monthly_{id_underscored}.html
-       app/templates/invoice_log_{id_underscored}.html
-  4. Restart the server — pdf_service.py picks up the new files automatically
+       backend/templates/invoice_{id_underscored}.html
+       backend/templates/invoice_monthly_{id_underscored}.html
+       backend/templates/invoice_log_{id_underscored}.html
+  4. Redeploy — pdf_service.py picks up the new files automatically
 """
 
 THEMES = {
