@@ -1,5 +1,6 @@
 import json
 
+# TODO: REMOVE AFTER PHASE 0 - Temporary endpoint for end-to-end verification only
 
 def handler(event, context):
     """

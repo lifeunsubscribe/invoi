@@ -32,6 +32,7 @@ export default $config({
       },
     });
 
+    // TODO: REMOVE AFTER PHASE 0 - Temporary route for end-to-end verification only
     // Phase 0: Hello endpoint for end-to-end verification
     api.route("GET /hello", {
       handler: "backend/functions/hello.handler",
