@@ -801,12 +801,23 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
     if (!d.clients) d.clients = [];
     if (!d.activeClientId) d.activeClientId = "";
     if (!d.signatureFont) d.signatureFont = "";
+    // Initialize invoice number config with defaults if not present
+    if (!d.invoiceNumberConfig) {
+      d.invoiceNumberConfig = {
+        prefix: "INV",
+        includeYear: false,
+        separator: "-",
+        padding: 3,
+        startingNumber: 1
+      };
+    }
     return d;
   });
   const [folderOverridden, setFolderOverridden] = useState(config.saveFolder && config.name ? config.saveFolder !== deriveSaveFolder(config.name) : false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const folderRef = useRef(null);
   const saveInProgressRef = useRef(false);
   const acc = draft.accent;
@@ -821,6 +832,36 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
       if (key==="name" && !folderOverridden) next.saveFolder = deriveSaveFolder(value);
       return next;
     });
+  };
+
+  // Helper to update nested invoice number config fields
+  const updateInvoiceNumberConfig = (field, value) => {
+    setDraft(d => ({
+      ...d,
+      invoiceNumberConfig: {
+        ...(d.invoiceNumberConfig || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  // Generate formatted invoice number for preview
+  const formatInvoiceNumber = (num) => {
+    const cfg = draft.invoiceNumberConfig || {};
+    const prefix = cfg.prefix || "INV";
+    const includeYear = cfg.includeYear || false;
+    const separator = cfg.separator === undefined ? "-" : cfg.separator;
+    const padding = cfg.padding || 3;
+
+    const year = includeYear ? new Date().getFullYear().toString() : "";
+    const sep = separator || "";
+    const paddedNum = String(num).padStart(padding, '0');
+
+    // Build format: PREFIX[-YEAR]-NUM or PREFIX-NUM depending on includeYear
+    if (includeYear && year) {
+      return `${prefix}${sep}${year}${sep}${paddedNum}`;
+    }
+    return `${prefix}${sep}${paddedNum}`;
   };
 
   const updateClient = (field, value) => {
@@ -1173,6 +1214,177 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                 );
               })}
             </div>
+          </div>
+
+          {/* Advanced Settings - Collapsible */}
+          <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 2px 20px rgba(0,0,0,0.07)",marginBottom:16}}>
+            <button
+              onClick={() => setAdvancedExpanded(!advancedExpanded)}
+              style={{
+                width:"100%",
+                background:chrome.titleBar,
+                padding:"16px 24px",
+                border:"none",
+                cursor:"pointer",
+                display:"flex",
+                alignItems:"center",
+                justifyContent:"space-between",
+                textAlign:"left"
+              }}
+            >
+              <div>
+                <div style={sectionTitleStyle}>Advanced Settings</div>
+                <div style={{fontSize:14,color:chrome.mutedText}}>Invoice numbering and other advanced options.</div>
+              </div>
+              <span style={{fontSize:18,color:acc,transition:"transform 0.2s",transform:advancedExpanded?"rotate(180deg)":"rotate(0deg)"}}>▼</span>
+            </button>
+
+            {advancedExpanded && (
+              <div style={{padding:"20px 24px"}}>
+                {/* Invoice Number Configuration */}
+                <div style={{marginBottom:8}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#5a4030",marginBottom:12}}>Invoice Numbering</div>
+
+                  {/* Prefix */}
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Prefix</label>
+                    <input
+                      type="text"
+                      value={draft.invoiceNumberConfig?.prefix || "INV"}
+                      onChange={e => {
+                        // Validate prefix: max 10 chars, alphanumeric only
+                        const value = e.target.value.slice(0, 10).replace(/[^A-Za-z0-9]/g, '');
+                        updateInvoiceNumberConfig("prefix", value);
+                      }}
+                      style={inputStyle}
+                      placeholder="INV"
+                    />
+                  </div>
+
+                  {/* Include Year Toggle */}
+                  <div style={{marginBottom:16}}>
+                    <label style={{...labelStyle,display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+                      <input
+                        type="checkbox"
+                        checked={draft.invoiceNumberConfig?.includeYear || false}
+                        onChange={e => updateInvoiceNumberConfig("includeYear", e.target.checked)}
+                        style={{width:16,height:16,cursor:"pointer"}}
+                      />
+                      <span>Include year in invoice number</span>
+                    </label>
+                  </div>
+
+                  {/* Separator */}
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Separator</label>
+                    <div style={{display:"flex",gap:8}}>
+                      {[
+                        {value:"-",label:"Dash (-)"},
+                        {value:"/",label:"Slash (/)"},
+                        {value:"",label:"None"}
+                      ].map(sep => {
+                        const selected = (draft.invoiceNumberConfig?.separator === undefined ? "-" : draft.invoiceNumberConfig?.separator) === sep.value;
+                        return (
+                          <button
+                            key={sep.value}
+                            onClick={() => updateInvoiceNumberConfig("separator", sep.value)}
+                            style={{
+                              flex:1,
+                              padding:"8px 12px",
+                              borderRadius:8,
+                              border:selected ? `2px solid ${acc}` : "1.5px solid #e8ddd8",
+                              background:selected ? `${acc}10` : "white",
+                              color:selected ? acc : "#5a4030",
+                              cursor:"pointer",
+                              fontSize:13,
+                              fontWeight:selected ? 600 : 400
+                            }}
+                          >
+                            {sep.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Starting Number */}
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Starting Number</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={draft.invoiceNumberConfig?.startingNumber || 1}
+                      onChange={e => {
+                        // Validate starting number: must be between 1 and 999999
+                        const num = parseInt(e.target.value) || 1;
+                        const validNum = Math.max(1, Math.min(999999, num));
+                        updateInvoiceNumberConfig("startingNumber", validNum);
+                      }}
+                      style={inputStyle}
+                    />
+                    <div style={{fontSize:11,color:"#b0988a",marginTop:4}}>Pick up from your existing system</div>
+                  </div>
+
+                  {/* Padding */}
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Number Padding</label>
+                    <div style={{display:"flex",gap:8}}>
+                      {[
+                        {value:2,label:"01"},
+                        {value:3,label:"001"},
+                        {value:4,label:"0001"}
+                      ].map(pad => {
+                        const selected = (draft.invoiceNumberConfig?.padding || 3) === pad.value;
+                        return (
+                          <button
+                            key={pad.value}
+                            onClick={() => updateInvoiceNumberConfig("padding", pad.value)}
+                            style={{
+                              flex:1,
+                              padding:"8px 12px",
+                              borderRadius:8,
+                              border:selected ? `2px solid ${acc}` : "1.5px solid #e8ddd8",
+                              background:selected ? `${acc}10` : "white",
+                              color:selected ? acc : "#5a4030",
+                              cursor:"pointer",
+                              fontSize:13,
+                              fontWeight:selected ? 600 : 400,
+                              fontFamily:"monospace"
+                            }}
+                          >
+                            {pad.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Live Preview */}
+                  <div style={{
+                    background:"#f8f4f0",
+                    borderRadius:10,
+                    padding:"14px 16px",
+                    marginTop:16
+                  }}>
+                    <div style={{fontSize:11,letterSpacing:1,textTransform:"uppercase",color:"#9a8070",marginBottom:8}}>Preview</div>
+                    <div style={{
+                      display:"flex",
+                      alignItems:"center",
+                      gap:8,
+                      fontSize:15,
+                      fontFamily:"monospace",
+                      color:"#2c1810"
+                    }}>
+                      <span style={{fontWeight:600}}>{formatInvoiceNumber(draft.invoiceNumberConfig?.startingNumber || 1)}</span>
+                      <span style={{color:"#b0988a"}}>→</span>
+                      <span>{formatInvoiceNumber((draft.invoiceNumberConfig?.startingNumber || 1) + 1)}</span>
+                      <span style={{color:"#b0988a"}}>→</span>
+                      <span>{formatInvoiceNumber((draft.invoiceNumberConfig?.startingNumber || 1) + 2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Success message if save succeeded */}
