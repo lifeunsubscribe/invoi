@@ -220,16 +220,17 @@ def _extract_user_id_from_token(event):
     """
     Extract userId from JWT token claims.
 
-    TODO: Once Cognito is set up in Phase 1, this will extract from:
-    event['requestContext']['authorizer']['jwt']['claims']['sub']
+    Requires properly validated Cognito JWT claims from API Gateway authorizer.
+    This extracts the user ID from:
+    - event['requestContext']['authorizer']['jwt']['claims']['sub'] (API Gateway v2)
+    - event['requestContext']['authorizer']['claims']['sub'] (API Gateway v1/Lambda authorizer)
 
-    For now, returns a placeholder for testing.
-    This is a temporary stub until Cognito integration is complete.
+    Returns None if no valid JWT claims are present (will result in 401 response).
     """
     # Check for Cognito authorizer claims (API Gateway v2 with JWT authorizer)
     try:
         claims = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {})
-        if claims:
+        if claims and 'sub' in claims:
             return claims.get('sub')
     except (KeyError, AttributeError):
         pass
@@ -237,20 +238,10 @@ def _extract_user_id_from_token(event):
     # Fallback: check for lambda authorizer format (API Gateway v1)
     try:
         authorizer = event.get('requestContext', {}).get('authorizer', {})
-        if authorizer and 'claims' in authorizer:
+        if authorizer and 'claims' in authorizer and 'sub' in authorizer['claims']:
             return authorizer['claims'].get('sub')
     except (KeyError, AttributeError):
         pass
 
-    # TODO: Remove this stub after Cognito is configured
-    # For Phase 1 development/testing without Cognito, extract from Authorization header
-    # This allows testing the endpoint before Cognito integration is complete
-    auth_header = event.get('headers', {}).get('authorization') or event.get('headers', {}).get('Authorization')
-    if auth_header and auth_header.startswith('Bearer '):
-        # Extract token portion after "Bearer "
-        token = auth_header[7:]
-        # For development, use the token itself as userId (will be replaced with Cognito sub)
-        # In production, this will be properly validated JWT with Cognito claims
-        return token if token else None
-
+    # No valid JWT claims found - authentication required
     return None
