@@ -1,6 +1,16 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 
+// API configuration - VITE_API_URL is injected by SST during deployment
+// For local development with `npx sst dev`, the URL is automatically provided
+// If undefined, API calls will fail - ensure SST is running or VITE_API_URL is set
 const API_BASE = import.meta.env.VITE_API_URL || '';
+
+if (!API_BASE && import.meta.env.DEV) {
+  console.warn(
+    'VITE_API_URL is not defined. API calls will fail.\n' +
+    'Run `npx sst dev` to start the development environment with the API.'
+  );
+}
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
