@@ -1487,6 +1487,9 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                       type="text"
                       value={draft.taxLabel || "Sales Tax"}
                       onChange={e => {
+                        setDraft(d => ({...d, taxLabel: e.target.value}));
+                      }}
+                      onBlur={e => {
                         const trimmed = e.target.value.trim();
                         setDraft(d => ({...d, taxLabel: trimmed || "Sales Tax"}));
                       }}
