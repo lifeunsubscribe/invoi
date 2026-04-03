@@ -136,7 +136,12 @@ def handle_post(user_id, event, headers):
 
         # Allowlist only valid profile fields to prevent arbitrary field injection
         # userId comes from token, ensuring users can only update their own profile
-        allowed_fields = ['name', 'email', 'rate']
+        allowed_fields = [
+            'name', 'email', 'rate', 'address', 'personalEmail', 'agency',
+            'accountantEmail', 'invoiceNote', 'saveFolder', 'clientName',
+            'clientEmail', 'occupation', 'accent', 'template', 'signatureFont',
+            'clients', 'activeClientId', 'invoiceNumberConfig'
+        ]
         user_data = {
             'userId': user_id
         }
