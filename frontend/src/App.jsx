@@ -811,6 +811,13 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
         startingNumber: 1
       };
     }
+    // Initialize payment terms with defaults if not present
+    if (!d.paymentTerms) d.paymentTerms = "receipt";
+    if (d.customPaymentDays === undefined) d.customPaymentDays = 30;
+    // Initialize tax settings with defaults if not present
+    if (d.taxEnabled === undefined) d.taxEnabled = false;
+    if (d.taxRate === undefined) d.taxRate = 0;
+    if (!d.taxLabel) d.taxLabel = "Sales Tax";
     return d;
   });
   const [folderOverridden, setFolderOverridden] = useState(config.saveFolder && config.name ? config.saveFolder !== deriveSaveFolder(config.name) : false);
@@ -1383,8 +1390,108 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                     </div>
                   </div>
                 </div>
+
+                {/* Payment Terms Configuration */}
+                <div style={{borderTop:"1px solid #f0e8e0",paddingTop:20,marginTop:20}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#5a4030",marginBottom:12}}>Payment Terms</div>
+
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Due Date Terms</label>
+                    <select
+                      value={draft.paymentTerms || "receipt"}
+                      onChange={e => setDraft(d => ({...d, paymentTerms: e.target.value}))}
+                      style={{...inputStyle,cursor:"pointer"}}
+                    >
+                      <option value="receipt">Due on receipt</option>
+                      <option value="net7">Net 7</option>
+                      <option value="net15">Net 15</option>
+                      <option value="net30">Net 30</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+
+                  {/* Custom payment days input - only shown when "custom" is selected */}
+                  {draft.paymentTerms === "custom" && (
+                    <div style={{marginBottom:16}}>
+                      <label style={labelStyle}>Custom Days</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="365"
+                        value={draft.customPaymentDays || 30}
+                        onChange={e => {
+                          const num = parseInt(e.target.value) || 1;
+                          const validNum = Math.max(1, Math.min(365, num));
+                          setDraft(d => ({...d, customPaymentDays: validNum}));
+                        }}
+                        style={inputStyle}
+                      />
+                      <div style={{fontSize:11,color:"#b0988a",marginTop:4}}>Number of days until payment is due (1-365)</div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
+          </div>
+
+          {/* Tax Settings */}
+          <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 2px 20px rgba(0,0,0,0.07)",marginBottom:16}}>
+            <div style={{background:chrome.titleBar,padding:"16px 24px"}}>
+              <div style={sectionTitleStyle}>Tax Settings</div>
+              <div style={{fontSize:14,color:chrome.mutedText}}>Configure sales tax display on invoices.</div>
+            </div>
+            <div style={{padding:"20px 24px"}}>
+              {/* Tax Toggle */}
+              <div style={{marginBottom:20}}>
+                <label style={{...labelStyle,display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}}>
+                  <input
+                    type="checkbox"
+                    checked={draft.taxEnabled || false}
+                    onChange={e => setDraft(d => ({...d, taxEnabled: e.target.checked}))}
+                    style={{width:18,height:18,cursor:"pointer",accentColor:acc}}
+                  />
+                  <span style={{fontWeight:600,color:"#5a4030"}}>Charge sales tax?</span>
+                </label>
+                <div style={{fontSize:12,color:"#b0988a",marginTop:4,marginLeft:26}}>When enabled, invoices will show subtotal, tax, and total.</div>
+              </div>
+
+              {/* Tax Rate and Label - only shown when tax is enabled */}
+              {draft.taxEnabled && (
+                <>
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Tax Rate (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={draft.taxRate || 0}
+                      onChange={e => {
+                        const num = parseFloat(e.target.value) || 0;
+                        const validNum = Math.max(0, Math.min(100, num));
+                        setDraft(d => ({...d, taxRate: validNum}));
+                      }}
+                      style={inputStyle}
+                      placeholder="8.25"
+                    />
+                    <div style={{fontSize:11,color:"#b0988a",marginTop:4}}>Tax percentage (0-100)</div>
+                  </div>
+
+                  <div style={{marginBottom:8}}>
+                    <label style={labelStyle}>Tax Label (Optional)</label>
+                    <input
+                      type="text"
+                      value={draft.taxLabel || "Sales Tax"}
+                      onChange={e => setDraft(d => ({...d, taxLabel: e.target.value}))}
+                      style={inputStyle}
+                      placeholder="Sales Tax"
+                      maxLength={50}
+                    />
+                    <div style={{fontSize:11,color:"#b0988a",marginTop:4}}>How tax appears on invoices (e.g., "Sales Tax", "GST", "VAT")</div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Success message if save succeeded */}
