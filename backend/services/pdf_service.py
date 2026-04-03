@@ -354,9 +354,9 @@ def render_weekly_pdf(config, hours, week, template_id,
     subtotal = total_hours * config['rate']
     tax_amount = 0
     tax_label = config.get('taxLabel', 'Tax')
+    tax_rate = config.get('taxRate', 0)  # e.g., 8.25 for 8.25%
 
     if tax_enabled:
-        tax_rate = config.get('taxRate', 0)  # e.g., 8.25 for 8.25%
         tax_amount = subtotal * (tax_rate / 100)
         total_with_tax = subtotal + tax_amount
     else:
@@ -373,7 +373,7 @@ def render_weekly_pdf(config, hours, week, template_id,
         'due_date': due_date,
         'tax_enabled': tax_enabled,
         'subtotal': f"{subtotal:.2f}",
-        'tax_rate': config.get('taxRate', 0),
+        'tax_rate': tax_rate,
         'tax_amount': f"{tax_amount:.2f}",
         'tax_label': tax_label,
         'total_with_tax': f"{total_with_tax:.2f}",
@@ -451,9 +451,9 @@ def render_monthly_pdf(config, week_data, month_label,
     subtotal = total_hours * config['rate']
     tax_amount = 0
     tax_label = config.get('taxLabel', 'Tax')
+    tax_rate = config.get('taxRate', 0)  # e.g., 8.25 for 8.25%
 
     if tax_enabled:
-        tax_rate = config.get('taxRate', 0)  # e.g., 8.25 for 8.25%
         tax_amount = subtotal * (tax_rate / 100)
         total_with_tax = subtotal + tax_amount
     else:
@@ -472,7 +472,7 @@ def render_monthly_pdf(config, week_data, month_label,
         'due_date': due_date,
         'tax_enabled': tax_enabled,
         'subtotal': f"{subtotal:.2f}",
-        'tax_rate': config.get('taxRate', 0),
+        'tax_rate': tax_rate,
         'tax_amount': f"{tax_amount:.2f}",
         'tax_label': tax_label,
         'total_with_tax': f"{total_with_tax:.2f}",
