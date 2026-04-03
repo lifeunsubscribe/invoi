@@ -1,6 +1,16 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 
+// API configuration - VITE_API_URL is injected by SST during deployment
+// For local development with `npx sst dev`, the URL is automatically provided
+// If undefined, API calls will fail - ensure SST is running or VITE_API_URL is set
 const API_BASE = import.meta.env.VITE_API_URL || '';
+
+if (!API_BASE && import.meta.env.DEV) {
+  console.warn(
+    'VITE_API_URL is not defined. API calls will fail.\n' +
+    'Run `npx sst dev` to start the development environment with the API.'
+  );
+}
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
@@ -2755,6 +2765,24 @@ export default function App() {
   const [scrollToFolder, setScrollToFolder] = useState(false);
   const [loading, setLoading] = useState(true);
   const [configError, setConfigError] = useState(null);
+  const [helloMessage, setHelloMessage] = useState(null); // TODO: REMOVE AFTER PHASE 0
+
+  // TODO: REMOVE AFTER PHASE 0 - Temporary test code for end-to-end verification only
+  // [Phase 0] Test end-to-end browser-to-Lambda flow
+  useEffect(() => {
+    // Only run in development to prevent production display
+    if (import.meta.env.DEV) {
+      fetch(`${API_BASE}/hello`)
+        .then(r => r.json())
+        .then(data => {
+          setHelloMessage(data.message);
+          console.log('[Phase 0 E2E Test] API Response:', data);
+        })
+        .catch(err => {
+          console.log('[Phase 0 E2E Test] Error:', err);
+        });
+    }
+  }, []);
 
   // Fetch config on app mount
   useEffect(() => {
@@ -2802,9 +2830,18 @@ export default function App() {
     </div>
   ) : null;
 
-  if (page==="log")     return <>{ErrorBanner}<DailyLogPage config={config} onBack={()=>setPage("menu")}/></>;
-  if (page==="weekly")  return <>{ErrorBanner}<WeeklyPage  config={config} onBack={()=>setPage("menu")}/></>;
-  if (page==="monthly") return <>{ErrorBanner}<MonthlyPage config={config} onBack={()=>setPage("menu")}/></>;
-  if (page==="profile") return <>{ErrorBanner}<ProfilePage config={config} onSave={setConfig} onBack={()=>setPage("menu")} scrollToFolder={scrollToFolder}/></>;
-  return <>{ErrorBanner}<LandingPage config={config} onNav={handleNav}/></>;
+  // TODO: REMOVE AFTER PHASE 0 - Temporary UI banner for end-to-end verification only
+  // [Phase 0] Display hello message from Lambda to verify end-to-end flow
+  const HelloBanner = (helloMessage && import.meta.env.DEV) ? (
+    <div style={{position:"fixed",bottom:20,right:20,background:"#e8f5e4",border:"2px solid #5a8a5a",borderRadius:8,padding:"12px 16px",zIndex:1000,boxShadow:"0 2px 8px rgba(0,0,0,0.1)"}}>
+      <div style={{fontSize:13,fontWeight:700,color:"#2d4a2d"}}>{helloMessage}</div>
+      <div style={{fontSize:11,color:"#6a8a60",marginTop:4}}>End-to-end connection verified</div>
+    </div>
+  ) : null;
+
+  if (page==="log")     return <>{ErrorBanner}{HelloBanner}<DailyLogPage config={config} onBack={()=>setPage("menu")}/></>;
+  if (page==="weekly")  return <>{ErrorBanner}{HelloBanner}<WeeklyPage  config={config} onBack={()=>setPage("menu")}/></>;
+  if (page==="monthly") return <>{ErrorBanner}{HelloBanner}<MonthlyPage config={config} onBack={()=>setPage("menu")}/></>;
+  if (page==="profile") return <>{ErrorBanner}{HelloBanner}<ProfilePage config={config} onSave={setConfig} onBack={()=>setPage("menu")} scrollToFolder={scrollToFolder}/></>;
+  return <>{ErrorBanner}{HelloBanner}<LandingPage config={config} onNav={handleNav}/></>;
 }

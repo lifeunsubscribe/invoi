@@ -1,5 +1,5 @@
 # Dependencies
-node_modules/
+node_modules
 frontend/node_modules/
 
 # Build output
@@ -26,3 +26,6 @@ backend/.venv/
 # OS
 .DS_Store
 Thumbs.db
+.rite
+.claude
+backend/node_modules

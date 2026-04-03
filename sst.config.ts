@@ -24,7 +24,19 @@ export default $config({
     });
 
     // API Gateway + Lambda functions
-    const api = new sst.aws.ApiGatewayV2("InvoiApi");
+    const api = new sst.aws.ApiGatewayV2("InvoiApi", {
+      cors: {
+        allowOrigins: ["*"],
+        allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowHeaders: ["Content-Type", "Authorization"],
+      },
+    });
+
+    // TODO: REMOVE AFTER PHASE 0 - Temporary route for end-to-end verification only
+    // Phase 0: Hello endpoint for end-to-end verification
+    api.route("GET /hello", {
+      handler: "backend/functions/hello.handler",
+    });
 
     // TODO: Add routes pointing to Lambda functions in Phase 1+
 
