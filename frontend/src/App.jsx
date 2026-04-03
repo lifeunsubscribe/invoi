@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { getAuthToken } from "./auth.jsx";
 
 // API configuration - VITE_API_URL is injected by SST during deployment
 // For local development with `npx sst dev`, the URL is automatically provided
@@ -805,6 +806,7 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
   const [folderOverridden, setFolderOverridden] = useState(config.saveFolder && config.name ? config.saveFolder !== deriveSaveFolder(config.name) : false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const folderRef = useRef(null);
   const saveInProgressRef = useRef(false);
   const acc = draft.accent;
@@ -902,17 +904,28 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
     saveInProgressRef.current = true;
     setSaving(true);
     setSaveError(null);
+    setSaveSuccess(false);
     try {
+      const token = getAuthToken();
       const response = await fetch(`${API_BASE}/api/config`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token,
+        },
         body: JSON.stringify(draft)
       });
       if (!response.ok) {
-        throw new Error(`Unable to save your profile settings. Please try again or contact support if the issue continues.`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Unable to save your profile settings. Please try again or contact support if the issue continues.`);
       }
+      // Update parent state with saved config
       onSave({ ...draft, rate: Number(draft.rate) || 0 });
-      onBack();
+      // Show success message briefly before returning to menu
+      setSaveSuccess(true);
+      setTimeout(() => {
+        onBack();
+      }, 1500);
     } catch (error) {
       console.error('Save failed:', error);
       setSaveError(error.message);
@@ -1161,6 +1174,14 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
               })}
             </div>
           </div>
+
+          {/* Success message if save succeeded */}
+          {saveSuccess && (
+            <div style={{background:"#e8f5e4",border:"1.5px solid #5a8a5a",borderRadius:10,padding:"12px 16px",marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#2d4a2d",marginBottom:3}}>Profile Saved</div>
+              <div style={{fontSize:12,color:"#4a6a4a"}}>Your profile changes have been saved successfully.</div>
+            </div>
+          )}
 
           {/* Error message if save failed */}
           {saveError && (
@@ -2785,9 +2806,16 @@ export default function App() {
   }, []);
 
   // Fetch config on app mount
+  // [Phase 1] API calls now include Authorization header from auth.jsx
   useEffect(() => {
     const abortController = new AbortController();
-    fetch(`${API_BASE}/api/config`, { signal: abortController.signal })
+    const token = getAuthToken();
+    fetch(`${API_BASE}/api/config`, {
+      signal: abortController.signal,
+      headers: {
+        'Authorization': token,
+      },
+    })
       .then(r => r.ok ? r.json() : Promise.reject(new Error('Config fetch failed')))
       .then(configData => {
         if (configData.rate != null) configData.rate = Number(configData.rate) || 0;
