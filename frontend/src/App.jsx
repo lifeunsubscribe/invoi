@@ -1468,10 +1468,10 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                       value={draft.taxRate || 0}
                       onChange={e => {
                         const num = parseFloat(e.target.value);
-                        if (isNaN(num) || num <= 0) {
-                          setDraft(d => ({...d, taxRate: 0.01}));
+                        if (isNaN(num) || e.target.value === '') {
+                          setDraft(d => ({...d, taxRate: 0}));
                         } else {
-                          const validNum = Math.min(100, num);
+                          const validNum = Math.max(0, Math.min(100, num));
                           setDraft(d => ({...d, taxRate: validNum}));
                         }
                       }}
