@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <clipPath id="bounds">
+      <rect x="0" y="0" width="256" height="256" rx="56"/>
+    </clipPath>
+  </defs>
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="#b76e79"/>
+  <rect x="28" y="30" width="200" height="210" rx="10" fill="#f8f6f4"/>
+  <ellipse cx="128" cy="242" rx="76" ry="9" fill="#8a4a58" opacity="0.35"/>
+  <line x1="52" y1="72"  x2="204" y2="72"  stroke="#444" stroke-width="7" stroke-linecap="round"/>
+  <line x1="52" y1="94"  x2="168" y2="94"  stroke="#bbb" stroke-width="5" stroke-linecap="round"/>
+  <line x1="52" y1="118" x2="204" y2="118" stroke="#ccc" stroke-width="4" stroke-linecap="round"/>
+  <line x1="52" y1="138" x2="204" y2="138" stroke="#ccc" stroke-width="4" stroke-linecap="round"/>
+  <line x1="52" y1="158" x2="204" y2="158" stroke="#ccc" stroke-width="4" stroke-linecap="round"/>
+  <line x1="52" y1="182" x2="204" y2="182" stroke="#444" stroke-width="7" stroke-linecap="round"/>
+  <line x1="52" y1="202" x2="152" y2="202" stroke="#bbb" stroke-width="5" stroke-linecap="round"/>
+  <path d="M196,52 C191,41 176,41 176,52 C176,63 196,74 196,74 C196,74 216,63 216,52 C216,41 201,41 196,52 Z" fill="#b76e79"/>
+</svg>

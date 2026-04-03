@@ -1,0 +1,45 @@
+/// <reference path="./.sst/platform/config.d.ts" />
+
+export default $config({
+  app(input) {
+    return {
+      name: "invoi",
+      removal: input?.stage === "production" ? "retain" : "remove",
+      home: "aws",
+    };
+  },
+  async run() {
+    // S3 bucket for PDFs and user assets
+    const bucket = new sst.aws.Bucket("InvoiStorage");
+
+    // DynamoDB tables
+    const usersTable = new sst.aws.Dynamo("UsersTable", {
+      fields: { userId: "string" },
+      primaryIndex: { hashKey: "userId" },
+    });
+
+    const invoicesTable = new sst.aws.Dynamo("InvoicesTable", {
+      fields: { userId: "string", invoiceId: "string" },
+      primaryIndex: { hashKey: "userId", rangeKey: "invoiceId" },
+    });
+
+    // API Gateway + Lambda functions
+    const api = new sst.aws.ApiGatewayV2("InvoiApi");
+
+    // TODO: Add routes pointing to Lambda functions in Phase 1+
+
+    // Static site (React frontend)
+    const site = new sst.aws.StaticSite("InvoiWeb", {
+      path: "frontend",
+      build: {
+        command: "npm run build",
+        output: "dist",
+      },
+      environment: {
+        VITE_API_URL: api.url,
+      },
+    });
+
+    return { api: api.url, site: site.url };
+  },
+});
