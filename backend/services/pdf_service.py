@@ -327,7 +327,15 @@ def render_weekly_pdf(config, hours, week, template_id,
         'clientName', 'clientEmail', 'invoiceNote',
     ])
 
-    total_hours, total_pay = _calculate_weekly_totals(hours, config['rate'])
+    # Validate that rate is a valid number (not just present)
+    try:
+        rate = float(config['rate'])
+        if rate < 0:
+            raise ValueError("rate must be a non-negative number")
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"Invalid rate value: {e}")
+
+    total_hours, total_pay = _calculate_weekly_totals(hours, rate)
 
     # Occupation-specific invoice title
     occ_titles = {
@@ -351,7 +359,7 @@ def render_weekly_pdf(config, hours, week, template_id,
     # Tax is applied to the subtotal (hours × rate) and displayed as a separate line item
     # Example: 40 hrs × $28/hr = $1120 subtotal, 8.25% tax = $92.40, total = $1212.40
     tax_enabled = config.get('taxEnabled', False)
-    subtotal = total_hours * config['rate']
+    subtotal = total_hours * rate
     tax_amount = 0
     tax_label = config.get('taxLabel', 'Tax')
     tax_rate = config.get('taxRate', 0)  # e.g., 8.25 for 8.25%
@@ -430,8 +438,16 @@ def render_monthly_pdf(config, week_data, month_label,
         'clientName', 'clientEmail', 'accountantEmail',
     ])
 
+    # Validate that rate is a valid number (not just present)
+    try:
+        rate = float(config['rate'])
+        if rate < 0:
+            raise ValueError("rate must be a non-negative number")
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"Invalid rate value: {e}")
+
     total_hours, total_pay, weeks_worked = _calculate_monthly_totals(
-        week_data, config['rate']
+        week_data, rate
     )
 
     # Generate invoice number if not provided
@@ -448,7 +464,7 @@ def render_monthly_pdf(config, week_data, month_label,
     # Tax is applied to the subtotal (hours × rate) and displayed as a separate line item
     # Example: 40 hrs × $28/hr = $1120 subtotal, 8.25% tax = $92.40, total = $1212.40
     tax_enabled = config.get('taxEnabled', False)
-    subtotal = total_hours * config['rate']
+    subtotal = total_hours * rate
     tax_amount = 0
     tax_label = config.get('taxLabel', 'Tax')
     tax_rate = config.get('taxRate', 0)  # e.g., 8.25 for 8.25%
