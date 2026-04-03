@@ -1251,7 +1251,11 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                     <input
                       type="text"
                       value={draft.invoiceNumberConfig?.prefix || "INV"}
-                      onChange={e => updateInvoiceNumberConfig("prefix", e.target.value)}
+                      onChange={e => {
+                        // Validate prefix: max 10 chars, alphanumeric only
+                        const value = e.target.value.slice(0, 10).replace(/[^A-Za-z0-9]/g, '');
+                        updateInvoiceNumberConfig("prefix", value);
+                      }}
                       style={inputStyle}
                       placeholder="INV"
                     />
@@ -1310,7 +1314,12 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                       type="number"
                       min="1"
                       value={draft.invoiceNumberConfig?.startingNumber || 1}
-                      onChange={e => updateInvoiceNumberConfig("startingNumber", parseInt(e.target.value) || 1)}
+                      onChange={e => {
+                        // Validate starting number: must be between 1 and 999999
+                        const num = parseInt(e.target.value) || 1;
+                        const validNum = Math.max(1, Math.min(999999, num));
+                        updateInvoiceNumberConfig("startingNumber", validNum);
+                      }}
                       style={inputStyle}
                     />
                     <div style={{fontSize:11,color:"#b0988a",marginTop:4}}>Pick up from your existing system</div>
