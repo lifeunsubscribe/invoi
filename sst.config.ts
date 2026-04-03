@@ -38,13 +38,18 @@ export default $config({
       handler: "backend/functions/hello.handler",
     });
 
-    // Phase 1: Config endpoint - user profile management
+    // Phase 1: User profile management
     api.route("GET /api/config", {
       handler: "backend/functions/config.handler",
       link: [usersTable],
     });
 
-    // TODO: Add more routes in future phases
+    api.route("POST /api/config", {
+      handler: "backend/functions/config.handler",
+      link: [usersTable],
+    });
+
+    // TODO: Add additional routes in Phase 2+
 
     // Static site (React frontend)
     const site = new sst.aws.StaticSite("InvoiWeb", {
