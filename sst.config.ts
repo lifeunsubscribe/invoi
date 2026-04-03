@@ -73,6 +73,16 @@ export default $config({
       primaryIndex: { hashKey: "userId", rangeKey: "invoiceId" },
     });
 
+    // Lambda Layer: ReportLab for PDF generation
+    // Contains ReportLab (>=4.1.0) and Pillow (>=10.0.0) Python dependencies
+    // Built from backend/layers/reportlab/requirements.txt
+    const reportlabLayer = new aws.lambda.LayerVersion("ReportLabLayer", {
+      layerName: "invoi-reportlab-layer",
+      code: new $stdlib.asset.FileArchive("./backend/layers/reportlab-build"),
+      compatibleRuntimes: ["python3.12", "python3.11"],
+      description: "ReportLab and Pillow for PDF generation",
+    });
+
     // API Gateway + Lambda functions
     const api = new sst.aws.ApiGatewayV2("InvoiApi", {
       cors: {
@@ -99,7 +109,23 @@ export default $config({
       link: [usersTable],
     });
 
-    // TODO: Add additional routes in Phase 2+
+    // Phase 2: Test ReportLab layer (temporary endpoint for validation)
+    api.route("GET /api/test-reportlab", {
+      handler: "backend/functions/test_reportlab.handler",
+      layers: [reportlabLayer.arn],
+      timeout: "10 seconds",
+      memory: "512 MB",
+    });
+
+    // TODO: Add PDF generation routes in Phase 2+
+    // Example route with ReportLab layer:
+    // api.route("POST /api/invoices/generate", {
+    //   handler: "backend/functions/generate_invoice.handler",
+    //   link: [usersTable, invoicesTable, bucket],
+    //   layers: [reportlabLayer.arn],
+    //   timeout: "30 seconds",
+    //   memory: "1024 MB",
+    // });
 
     // Static site (React frontend) - defined after API/Cognito to pass correct env vars
     // These VITE_* variables are exposed to the React app at build time
@@ -121,6 +147,7 @@ export default $config({
       ApiEndpoint: api.url,  // Matches verification command: $(sst output ApiEndpoint)
       api: api.url,          // Kept for backward compatibility
       site: site.url,
+      reportlabLayerArn: reportlabLayer.arn,  // For testing ReportLab imports
       userPool: userPool.id,
       userPoolClient: userPoolClient.id,
       hostedUI: userPool.domainUrl,
