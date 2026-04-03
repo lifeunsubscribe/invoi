@@ -52,6 +52,10 @@ export default $config({
       },
     });
 
-    return { api: api.url, site: site.url };
+    return {
+      ApiEndpoint: api.url,  // Matches verification command: $(sst output ApiEndpoint)
+      api: api.url,          // Kept for backward compatibility
+      site: site.url
+    };
   },
 });
