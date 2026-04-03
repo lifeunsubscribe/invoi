@@ -31,6 +31,14 @@ def handler(event, context):
         # Extract HTTP method (supports both API Gateway v1 and v2 formats)
         http_method = event.get('requestContext', {}).get('http', {}).get('method') or event.get('httpMethod', 'GET')
 
+        # Handle CORS preflight requests before auth check
+        if http_method == 'OPTIONS':
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': ''
+            }
+
         # Extract userId from JWT claims
         # TODO: Once Cognito is set up in Phase 1, this will come from:
         # event['requestContext']['authorizer']['jwt']['claims']['sub']
@@ -56,14 +64,7 @@ def handler(event, context):
             }
 
         # Route to appropriate handler
-        if http_method == 'OPTIONS':
-            # Handle CORS preflight requests
-            return {
-                'statusCode': 200,
-                'headers': headers,
-                'body': ''
-            }
-        elif http_method == 'GET':
+        if http_method == 'GET':
             return handle_get(user_id, headers)
         elif http_method == 'POST':
             return handle_post(user_id, event, headers)
@@ -87,16 +88,16 @@ def handler(event, context):
 def handle_get(user_id, headers):
     """
     Handle GET /api/config - retrieve user profile.
+
+    Returns existing profile if found in DynamoDB, otherwise returns default profile
+    with sensible defaults for new users.
     """
     try:
         user = get_user(user_id)
 
         if not user:
-            return {
-                'statusCode': 404,
-                'headers': headers,
-                'body': json.dumps({'error': 'User profile not found'})
-            }
+            # Return default profile for new users (not yet saved to DB)
+            user = get_default_profile(user_id)
 
         return {
             'statusCode': 200,
@@ -136,7 +137,12 @@ def handle_post(user_id, event, headers):
 
         # Allowlist only valid profile fields to prevent arbitrary field injection
         # userId comes from token, ensuring users can only update their own profile
-        allowed_fields = ['name', 'email', 'rate']
+        allowed_fields = [
+            'name', 'email', 'rate', 'address', 'personalEmail', 'agency',
+            'accountantEmail', 'invoiceNote', 'saveFolder', 'clientName',
+            'clientEmail', 'occupation', 'accent', 'template', 'signatureFont',
+            'clients', 'activeClientId', 'invoiceNumberConfig'
+        ]
         user_data = {
             'userId': user_id
         }
@@ -214,6 +220,45 @@ def validate_profile_fields(data):
         return 'Rate must be a valid number'
 
     return None
+
+
+def get_default_profile(user_id):
+    """
+    Generate default profile for new users.
+
+    Returns a profile structure with sensible defaults matching the Users table schema.
+    This profile is NOT saved to DynamoDB — it's returned on first GET and the user
+    must POST to save their actual profile data.
+    """
+    return {
+        'userId': user_id,
+        'email': '',
+        'name': '',
+        'address': '',
+        'personalEmail': '',
+        'rate': 0,
+        'occupation': 'other',
+        'accent': '#b76e79',
+        'template': 'morning-light',
+        'invoiceNote': '',
+        'signatureFont': 'Dancing Script',
+        'accountantEmail': '',
+        'invoiceNumberConfig': {
+            'prefix': 'INV',
+            'includeYear': False,
+            'separator': '-',
+            'padding': 3,
+            'nextNum': 1
+        },
+        'paymentTerms': 'receipt',
+        'taxEnabled': False,
+        'taxRate': 0,
+        'taxLabel': 'Sales Tax',
+        'logoKey': '',
+        'logoSize': 'medium',
+        'clients': [],
+        'activeClientId': ''
+    }
 
 
 def _extract_user_id_from_token(event):

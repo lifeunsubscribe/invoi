@@ -9,6 +9,56 @@ export default $config({
     };
   },
   async run() {
+    // Google OAuth credentials (set via `sst secret set GoogleClientId <value>`)
+    const googleClientId = new sst.Secret("GoogleClientId");
+    const googleClientSecret = new sst.Secret("GoogleClientSecret");
+
+    // Cognito User Pool for authentication
+    // Uses email as username for sign-in, creates stage-specific hosted UI domain
+    const userPool = new sst.aws.CognitoUserPool("InvoiUserPool", {
+      usernames: ["email"],
+      domain: {
+        prefix: `invoi-${$app.stage}`, // e.g., invoi-dev.auth.us-east-1.amazoncognito.com
+      },
+    });
+
+    // Configure Google as OAuth provider
+    // Maps Google user attributes to Cognito user pool attributes
+    // Requires Google OAuth app configured with matching callback URLs
+    userPool.addIdentityProvider("Google", {
+      type: "google",
+      details: {
+        authorize_scopes: "email profile openid",
+        client_id: googleClientId.value,
+        client_secret: googleClientSecret.value,
+      },
+      attributes: {
+        email: "email",      // Google email -> Cognito email
+        name: "name",        // Google name -> Cognito name
+        picture: "picture",  // Google profile pic -> Cognito picture
+        username: "sub",     // Google user ID -> Cognito username
+      },
+    });
+
+    // User pool client for React app
+    // Configures OAuth flow with environment-specific callback URLs
+    // Note: In dev, uses localhost. In production, uses placeholder that will be replaced
+    // with actual site URL after deployment (Cognito allows updating callback URLs)
+    const userPoolClient = userPool.addClient("Web", {
+      providers: ["Google"],
+      oauth: {
+        // Use localhost for dev, wildcard placeholder for production (update after first deploy)
+        callbackUrls: [
+          $dev ? "http://localhost:5173/auth/callback" : "https://placeholder-update-after-deploy.com/auth/callback"
+        ],
+        logoutUrls: [
+          $dev ? "http://localhost:5173/auth/logout" : "https://placeholder-update-after-deploy.com/auth/logout"
+        ],
+        flows: ["authorization_code"], // Standard OAuth 2.0 flow
+        scopes: ["email", "openid", "profile"], // Request user's basic info
+      },
+    });
+
     // S3 bucket for PDFs and user assets
     const bucket = new sst.aws.Bucket("InvoiStorage");
 
@@ -77,7 +127,8 @@ export default $config({
     //   memory: "1024 MB",
     // });
 
-    // Static site (React frontend)
+    // Static site (React frontend) - defined after API/Cognito to pass correct env vars
+    // These VITE_* variables are exposed to the React app at build time
     const site = new sst.aws.StaticSite("InvoiWeb", {
       path: "frontend",
       build: {
@@ -86,6 +137,9 @@ export default $config({
       },
       environment: {
         VITE_API_URL: api.url,
+        VITE_COGNITO_USER_POOL_ID: userPool.id,
+        VITE_COGNITO_CLIENT_ID: userPoolClient.id,
+        VITE_COGNITO_DOMAIN: userPool.domainUrl, // Hosted UI domain for auth flows
       },
     });
 
@@ -94,6 +148,9 @@ export default $config({
       api: api.url,          // Kept for backward compatibility
       site: site.url,
       reportlabLayerArn: reportlabLayer.arn,  // For testing ReportLab imports
+      userPool: userPool.id,
+      userPoolClient: userPoolClient.id,
+      hostedUI: userPool.domainUrl,
     };
   },
 });

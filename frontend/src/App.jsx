@@ -801,12 +801,30 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
     if (!d.clients) d.clients = [];
     if (!d.activeClientId) d.activeClientId = "";
     if (!d.signatureFont) d.signatureFont = "";
+    // Initialize invoice number config with defaults if not present
+    if (!d.invoiceNumberConfig) {
+      d.invoiceNumberConfig = {
+        prefix: "INV",
+        includeYear: false,
+        separator: "-",
+        padding: 3,
+        startingNumber: 1
+      };
+    }
+    // Initialize payment terms with defaults if not present
+    if (!d.paymentTerms) d.paymentTerms = "receipt";
+    if (d.customPaymentDays === undefined) d.customPaymentDays = 30;
+    // Initialize tax settings with defaults if not present
+    if (d.taxEnabled === undefined) d.taxEnabled = false;
+    if (d.taxRate === undefined) d.taxRate = 0;
+    if (!d.taxLabel) d.taxLabel = "Sales Tax";
     return d;
   });
   const [folderOverridden, setFolderOverridden] = useState(config.saveFolder && config.name ? config.saveFolder !== deriveSaveFolder(config.name) : false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const folderRef = useRef(null);
   const saveInProgressRef = useRef(false);
   const acc = draft.accent;
@@ -821,6 +839,36 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
       if (key==="name" && !folderOverridden) next.saveFolder = deriveSaveFolder(value);
       return next;
     });
+  };
+
+  // Helper to update nested invoice number config fields
+  const updateInvoiceNumberConfig = (field, value) => {
+    setDraft(d => ({
+      ...d,
+      invoiceNumberConfig: {
+        ...(d.invoiceNumberConfig || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  // Generate formatted invoice number for preview
+  const formatInvoiceNumber = (num) => {
+    const cfg = draft.invoiceNumberConfig || {};
+    const prefix = cfg.prefix || "INV";
+    const includeYear = cfg.includeYear || false;
+    const separator = cfg.separator === undefined ? "-" : cfg.separator;
+    const padding = cfg.padding || 3;
+
+    const year = includeYear ? new Date().getFullYear().toString() : "";
+    const sep = separator || "";
+    const paddedNum = String(num).padStart(padding, '0');
+
+    // Build format: PREFIX[-YEAR]-NUM or PREFIX-NUM depending on includeYear
+    if (includeYear && year) {
+      return `${prefix}${sep}${year}${sep}${paddedNum}`;
+    }
+    return `${prefix}${sep}${paddedNum}`;
   };
 
   const updateClient = (field, value) => {
@@ -1172,6 +1220,287 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Advanced Settings - Collapsible */}
+          <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 2px 20px rgba(0,0,0,0.07)",marginBottom:16}}>
+            <button
+              onClick={() => setAdvancedExpanded(!advancedExpanded)}
+              style={{
+                width:"100%",
+                background:chrome.titleBar,
+                padding:"16px 24px",
+                border:"none",
+                cursor:"pointer",
+                display:"flex",
+                alignItems:"center",
+                justifyContent:"space-between",
+                textAlign:"left"
+              }}
+            >
+              <div>
+                <div style={sectionTitleStyle}>Advanced Settings</div>
+                <div style={{fontSize:14,color:chrome.mutedText}}>Invoice numbering and other advanced options.</div>
+              </div>
+              <span style={{fontSize:18,color:acc,transition:"transform 0.2s",transform:advancedExpanded?"rotate(180deg)":"rotate(0deg)"}}>▼</span>
+            </button>
+
+            {advancedExpanded && (
+              <div style={{padding:"20px 24px"}}>
+                {/* Invoice Number Configuration */}
+                <div style={{marginBottom:8}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#5a4030",marginBottom:12}}>Invoice Numbering</div>
+
+                  {/* Prefix */}
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Prefix</label>
+                    <input
+                      type="text"
+                      value={draft.invoiceNumberConfig?.prefix || "INV"}
+                      onChange={e => {
+                        // Validate prefix: max 10 chars, alphanumeric only
+                        const value = e.target.value.slice(0, 10).replace(/[^A-Za-z0-9]/g, '');
+                        updateInvoiceNumberConfig("prefix", value);
+                      }}
+                      style={inputStyle}
+                      placeholder="INV"
+                    />
+                  </div>
+
+                  {/* Include Year Toggle */}
+                  <div style={{marginBottom:16}}>
+                    <label style={{...labelStyle,display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+                      <input
+                        type="checkbox"
+                        checked={draft.invoiceNumberConfig?.includeYear || false}
+                        onChange={e => updateInvoiceNumberConfig("includeYear", e.target.checked)}
+                        style={{width:16,height:16,cursor:"pointer"}}
+                      />
+                      <span>Include year in invoice number</span>
+                    </label>
+                  </div>
+
+                  {/* Separator */}
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Separator</label>
+                    <div style={{display:"flex",gap:8}}>
+                      {[
+                        {value:"-",label:"Dash (-)"},
+                        {value:"/",label:"Slash (/)"},
+                        {value:"",label:"None"}
+                      ].map(sep => {
+                        const selected = (draft.invoiceNumberConfig?.separator === undefined ? "-" : draft.invoiceNumberConfig?.separator) === sep.value;
+                        return (
+                          <button
+                            key={sep.value}
+                            onClick={() => updateInvoiceNumberConfig("separator", sep.value)}
+                            style={{
+                              flex:1,
+                              padding:"8px 12px",
+                              borderRadius:8,
+                              border:selected ? `2px solid ${acc}` : "1.5px solid #e8ddd8",
+                              background:selected ? `${acc}10` : "white",
+                              color:selected ? acc : "#5a4030",
+                              cursor:"pointer",
+                              fontSize:13,
+                              fontWeight:selected ? 600 : 400
+                            }}
+                          >
+                            {sep.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Starting Number */}
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Starting Number</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={draft.invoiceNumberConfig?.startingNumber || 1}
+                      onChange={e => {
+                        // Validate starting number: must be between 1 and 999999
+                        const num = parseInt(e.target.value) || 1;
+                        const validNum = Math.max(1, Math.min(999999, num));
+                        updateInvoiceNumberConfig("startingNumber", validNum);
+                      }}
+                      style={inputStyle}
+                    />
+                    <div style={{fontSize:11,color:"#b0988a",marginTop:4}}>Pick up from your existing system</div>
+                  </div>
+
+                  {/* Padding */}
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Number Padding</label>
+                    <div style={{display:"flex",gap:8}}>
+                      {[
+                        {value:2,label:"01"},
+                        {value:3,label:"001"},
+                        {value:4,label:"0001"}
+                      ].map(pad => {
+                        const selected = (draft.invoiceNumberConfig?.padding || 3) === pad.value;
+                        return (
+                          <button
+                            key={pad.value}
+                            onClick={() => updateInvoiceNumberConfig("padding", pad.value)}
+                            style={{
+                              flex:1,
+                              padding:"8px 12px",
+                              borderRadius:8,
+                              border:selected ? `2px solid ${acc}` : "1.5px solid #e8ddd8",
+                              background:selected ? `${acc}10` : "white",
+                              color:selected ? acc : "#5a4030",
+                              cursor:"pointer",
+                              fontSize:13,
+                              fontWeight:selected ? 600 : 400,
+                              fontFamily:"monospace"
+                            }}
+                          >
+                            {pad.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Live Preview */}
+                  <div style={{
+                    background:"#f8f4f0",
+                    borderRadius:10,
+                    padding:"14px 16px",
+                    marginTop:16
+                  }}>
+                    <div style={{fontSize:11,letterSpacing:1,textTransform:"uppercase",color:"#9a8070",marginBottom:8}}>Preview</div>
+                    <div style={{
+                      display:"flex",
+                      alignItems:"center",
+                      gap:8,
+                      fontSize:15,
+                      fontFamily:"monospace",
+                      color:"#2c1810"
+                    }}>
+                      <span style={{fontWeight:600}}>{formatInvoiceNumber(draft.invoiceNumberConfig?.startingNumber || 1)}</span>
+                      <span style={{color:"#b0988a"}}>→</span>
+                      <span>{formatInvoiceNumber((draft.invoiceNumberConfig?.startingNumber || 1) + 1)}</span>
+                      <span style={{color:"#b0988a"}}>→</span>
+                      <span>{formatInvoiceNumber((draft.invoiceNumberConfig?.startingNumber || 1) + 2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Terms Configuration */}
+                <div style={{borderTop:"1px solid #f0e8e0",paddingTop:20,marginTop:20}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#5a4030",marginBottom:12}}>Payment Terms</div>
+
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Due Date Terms</label>
+                    <select
+                      value={draft.paymentTerms || "receipt"}
+                      onChange={e => setDraft(d => ({...d, paymentTerms: e.target.value}))}
+                      style={{...inputStyle,cursor:"pointer"}}
+                    >
+                      <option value="receipt">Due on receipt</option>
+                      <option value="net7">Net 7</option>
+                      <option value="net15">Net 15</option>
+                      <option value="net30">Net 30</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+
+                  {/* Custom payment days input - only shown when "custom" is selected */}
+                  {draft.paymentTerms === "custom" && (
+                    <div style={{marginBottom:16}}>
+                      <label style={labelStyle}>Custom Days</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="365"
+                        value={draft.customPaymentDays || 30}
+                        onChange={e => {
+                          const num = parseInt(e.target.value) || 1;
+                          const validNum = Math.max(1, Math.min(365, num));
+                          setDraft(d => ({...d, customPaymentDays: validNum}));
+                        }}
+                        style={inputStyle}
+                      />
+                      <div style={{fontSize:11,color:"#b0988a",marginTop:4}}>Number of days until payment is due (1-365)</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Tax Settings */}
+          <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 2px 20px rgba(0,0,0,0.07)",marginBottom:16}}>
+            <div style={{background:chrome.titleBar,padding:"16px 24px"}}>
+              <div style={sectionTitleStyle}>Tax Settings</div>
+              <div style={{fontSize:14,color:chrome.mutedText}}>Configure sales tax display on invoices.</div>
+            </div>
+            <div style={{padding:"20px 24px"}}>
+              {/* Tax Toggle */}
+              <div style={{marginBottom:20}}>
+                <label style={{...labelStyle,display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}}>
+                  <input
+                    type="checkbox"
+                    checked={draft.taxEnabled || false}
+                    onChange={e => setDraft(d => ({...d, taxEnabled: e.target.checked}))}
+                    style={{width:18,height:18,cursor:"pointer",accentColor:acc}}
+                  />
+                  <span style={{fontWeight:600,color:"#5a4030"}}>Charge sales tax?</span>
+                </label>
+                <div style={{fontSize:12,color:"#b0988a",marginTop:4,marginLeft:26}}>When enabled, invoices will show subtotal, tax, and total.</div>
+              </div>
+
+              {/* Tax Rate and Label - only shown when tax is enabled */}
+              {draft.taxEnabled && (
+                <>
+                  <div style={{marginBottom:16}}>
+                    <label style={labelStyle}>Tax Rate (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={draft.taxRate || 0}
+                      onChange={e => {
+                        const num = parseFloat(e.target.value);
+                        if (isNaN(num) || e.target.value === '') {
+                          setDraft(d => ({...d, taxRate: 0}));
+                        } else {
+                          const validNum = Math.max(0, Math.min(100, num));
+                          setDraft(d => ({...d, taxRate: validNum}));
+                        }
+                      }}
+                      style={inputStyle}
+                      placeholder="8.25"
+                    />
+                    <div style={{fontSize:11,color:"#b0988a",marginTop:4}}>Tax percentage (0-100)</div>
+                  </div>
+
+                  <div style={{marginBottom:8}}>
+                    <label style={labelStyle}>Tax Label (Optional)</label>
+                    <input
+                      type="text"
+                      value={draft.taxLabel || "Sales Tax"}
+                      onChange={e => {
+                        setDraft(d => ({...d, taxLabel: e.target.value}));
+                      }}
+                      onBlur={e => {
+                        const trimmed = e.target.value.trim();
+                        setDraft(d => ({...d, taxLabel: trimmed || "Sales Tax"}));
+                      }}
+                      style={inputStyle}
+                      placeholder="Sales Tax"
+                      maxLength={50}
+                    />
+                    <div style={{fontSize:11,color:"#b0988a",marginTop:4}}>How tax appears on invoices (e.g., "Sales Tax", "GST", "VAT")</div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
