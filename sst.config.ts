@@ -40,29 +40,19 @@ export default $config({
       },
     });
 
-    // Static site (React frontend) - defined early to get URL for Cognito callbacks
-    const site = new sst.aws.StaticSite("InvoiWeb", {
-      path: "frontend",
-      build: {
-        command: "npm run build",
-        output: "dist",
-      },
-      environment: {
-        VITE_API_URL: "", // Will be set after API is defined below
-      },
-    });
-
     // User pool client for React app
     // Configures OAuth flow with environment-specific callback URLs
+    // Note: In dev, uses localhost. In production, uses placeholder that will be replaced
+    // with actual site URL after deployment (Cognito allows updating callback URLs)
     const userPoolClient = userPool.addClient("Web", {
       providers: ["Google"],
       oauth: {
-        // Use localhost for dev, deployed site URL for production
+        // Use localhost for dev, wildcard placeholder for production (update after first deploy)
         callbackUrls: [
-          $dev ? "http://localhost:5173/auth/callback" : $interpolate`${site.url}/auth/callback`
+          $dev ? "http://localhost:5173/auth/callback" : "https://placeholder-update-after-deploy.com/auth/callback"
         ],
         logoutUrls: [
-          $dev ? "http://localhost:5173/auth/logout" : $interpolate`${site.url}/auth/logout`
+          $dev ? "http://localhost:5173/auth/logout" : "https://placeholder-update-after-deploy.com/auth/logout"
         ],
         flows: ["authorization_code"], // Standard OAuth 2.0 flow
         scopes: ["email", "openid", "profile"], // Request user's basic info
@@ -100,14 +90,21 @@ export default $config({
 
     // TODO: Add routes pointing to Lambda functions in Phase 1+
 
-    // Update site environment variables with API URL and Cognito config
+    // Static site (React frontend) - defined after API/Cognito to pass correct env vars
     // These VITE_* variables are exposed to the React app at build time
-    site.environment = {
-      VITE_API_URL: api.url,
-      VITE_COGNITO_USER_POOL_ID: userPool.id,
-      VITE_COGNITO_CLIENT_ID: userPoolClient.id,
-      VITE_COGNITO_DOMAIN: userPool.domainUrl, // Hosted UI domain for auth flows
-    };
+    const site = new sst.aws.StaticSite("InvoiWeb", {
+      path: "frontend",
+      build: {
+        command: "npm run build",
+        output: "dist",
+      },
+      environment: {
+        VITE_API_URL: api.url,
+        VITE_COGNITO_USER_POOL_ID: userPool.id,
+        VITE_COGNITO_CLIENT_ID: userPoolClient.id,
+        VITE_COGNITO_DOMAIN: userPool.domainUrl, // Hosted UI domain for auth flows
+      },
+    });
 
     return {
       api: api.url,
