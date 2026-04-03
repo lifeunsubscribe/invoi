@@ -88,7 +88,18 @@ export default $config({
       handler: "backend/functions/hello.handler",
     });
 
-    // TODO: Add routes pointing to Lambda functions in Phase 1+
+    // Phase 1: User profile management
+    api.route("GET /api/config", {
+      handler: "backend/functions/config.handler",
+      link: [usersTable],
+    });
+
+    api.route("POST /api/config", {
+      handler: "backend/functions/config.handler",
+      link: [usersTable],
+    });
+
+    // TODO: Add additional routes in Phase 2+
 
     // Static site (React frontend) - defined after API/Cognito to pass correct env vars
     // These VITE_* variables are exposed to the React app at build time
@@ -107,7 +118,8 @@ export default $config({
     });
 
     return {
-      api: api.url,
+      ApiEndpoint: api.url,  // Matches verification command: $(sst output ApiEndpoint)
+      api: api.url,          // Kept for backward compatibility
       site: site.url,
       userPool: userPool.id,
       userPoolClient: userPoolClient.id,
