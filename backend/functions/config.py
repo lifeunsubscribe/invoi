@@ -142,7 +142,11 @@ def handle_post(user_id, event, headers):
         }
         for field in allowed_fields:
             if field in body:
-                user_data[field] = body[field]
+                # Normalize rate to float to ensure consistent storage type
+                if field == 'rate':
+                    user_data[field] = float(body[field])
+                else:
+                    user_data[field] = body[field]
 
         # Update user profile in DynamoDB (put_user handles create or update)
         updated_user = put_user(user_data)
@@ -239,5 +243,14 @@ def _extract_user_id_from_token(event):
         pass
 
     # TODO: Remove this stub after Cognito is configured
-    # For Phase 1 testing without Cognito, return None to trigger 401
+    # For Phase 1 development/testing without Cognito, extract from Authorization header
+    # This allows testing the endpoint before Cognito integration is complete
+    auth_header = event.get('headers', {}).get('authorization') or event.get('headers', {}).get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        # Extract token portion after "Bearer "
+        token = auth_header[7:]
+        # For development, use the token itself as userId (will be replaced with Cognito sub)
+        # In production, this will be properly validated JWT with Cognito claims
+        return token if token else None
+
     return None
