@@ -155,10 +155,18 @@ def _calculate_due_date(invoice_date, payment_terms):
         days_str = terms_lower[3:]
         try:
             days_to_add = int(days_str)
-        except ValueError:
+            if days_to_add < 0:
+                raise ValueError(
+                    f"Invalid payment terms '{payment_terms}'. "
+                    "Days must be non-negative (e.g., 'net7', 'net30', not 'net-15')"
+                )
+        except ValueError as e:
+            # Re-raise our custom error message, or provide a generic one
+            if "Days must be non-negative" in str(e):
+                raise
             raise ValueError(
                 f"Invalid payment terms '{payment_terms}'. "
-                "Expected 'receipt' or 'netN' where N is a number (e.g., 'net7', 'net30')"
+                "Expected 'receipt' or 'netN' where N is a non-negative number (e.g., 'net7', 'net30')"
             )
     else:
         raise ValueError(
