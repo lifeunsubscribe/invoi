@@ -56,7 +56,14 @@ def handler(event, context):
             }
 
         # Route to appropriate handler
-        if http_method == 'GET':
+        if http_method == 'OPTIONS':
+            # Handle CORS preflight requests
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': ''
+            }
+        elif http_method == 'GET':
             return handle_get(user_id, headers)
         elif http_method == 'POST':
             return handle_post(user_id, event, headers)
@@ -127,12 +134,15 @@ def handle_post(user_id, event, headers):
                 'body': json.dumps({'error': validation_error})
             }
 
-        # Merge userId with the profile data (userId from token, all other fields from body)
-        # This ensures users can only update their own profile
+        # Allowlist only valid profile fields to prevent arbitrary field injection
+        # userId comes from token, ensuring users can only update their own profile
+        allowed_fields = ['name', 'email', 'rate']
         user_data = {
-            'userId': user_id,
-            **body
+            'userId': user_id
         }
+        for field in allowed_fields:
+            if field in body:
+                user_data[field] = body[field]
 
         # Update user profile in DynamoDB (put_user handles create or update)
         updated_user = put_user(user_data)
