@@ -38,7 +38,18 @@ export default $config({
       handler: "backend/functions/hello.handler",
     });
 
-    // TODO: Add routes pointing to Lambda functions in Phase 1+
+    // Phase 1: User profile management
+    api.route("GET /api/config", {
+      handler: "backend/functions/config.handler",
+      link: [usersTable],
+    });
+
+    api.route("POST /api/config", {
+      handler: "backend/functions/config.handler",
+      link: [usersTable],
+    });
+
+    // TODO: Add additional routes in Phase 2+
 
     // Static site (React frontend)
     const site = new sst.aws.StaticSite("InvoiWeb", {
