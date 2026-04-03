@@ -29,3 +29,6 @@ Thumbs.db
 .rite
 .claude
 backend/node_modules
+
+# Development
+SCRATCHPAD.md
