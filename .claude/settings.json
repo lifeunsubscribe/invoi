@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./node_modules/.bin/sst init:*)",
+      "Bash(python3 -m py_compile backend/themes.py)",
+      "Bash(python3 -m py_compile backend/services/pdf_service.py)",
+      "Bash(python3 -m py_compile backend/services/mail_service.py)",
+      "Bash(python3 -m py_compile backend/services/db_service.py)",
+      "Bash(python3 -m py_compile backend/functions/config.py)"
+    ]
+  }
+}
