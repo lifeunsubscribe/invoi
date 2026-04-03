@@ -1467,9 +1467,13 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                       step="0.01"
                       value={draft.taxRate || 0}
                       onChange={e => {
-                        const num = parseFloat(e.target.value) || 0;
-                        const validNum = Math.max(0, Math.min(100, num));
-                        setDraft(d => ({...d, taxRate: validNum}));
+                        const num = parseFloat(e.target.value);
+                        if (isNaN(num) || num <= 0) {
+                          setDraft(d => ({...d, taxRate: 0.01}));
+                        } else {
+                          const validNum = Math.min(100, num);
+                          setDraft(d => ({...d, taxRate: validNum}));
+                        }
                       }}
                       style={inputStyle}
                       placeholder="8.25"
@@ -1482,7 +1486,10 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                     <input
                       type="text"
                       value={draft.taxLabel || "Sales Tax"}
-                      onChange={e => setDraft(d => ({...d, taxLabel: e.target.value}))}
+                      onChange={e => {
+                        const trimmed = e.target.value.trim();
+                        setDraft(d => ({...d, taxLabel: trimmed || "Sales Tax"}));
+                      }}
                       style={inputStyle}
                       placeholder="Sales Tax"
                       maxLength={50}
