@@ -3747,6 +3747,11 @@ export default function App() {
     );
   }
 
+  // [Phase 6] Legal pages accessible to both authenticated and unauthenticated users
+  // Must be checked BEFORE authentication to allow public access (required for Google OAuth approval)
+  if (page==="privacy") return <PrivacyPolicy onBack={()=>setPage("menu")}/>;
+  if (page==="terms")   return <TermsOfService onBack={()=>setPage("menu")}/>;
+
   // [Phase 5] Show marketing landing page for unauthenticated users
   // This is the public-facing page at goinvoi.com root that explains the product
   // and provides "Sign in with Google" CTAs. Once OAuth is configured, users will
@@ -3775,10 +3780,6 @@ export default function App() {
       <div style={{fontSize:11,color:"#6a8a60",marginTop:4}}>End-to-end connection verified</div>
     </div>
   ) : null;
-
-  // [Phase 6] Legal pages accessible to both authenticated and unauthenticated users
-  if (page==="privacy") return <PrivacyPolicy onBack={()=>setPage("menu")}/>;
-  if (page==="terms")   return <TermsOfService onBack={()=>setPage("menu")}/>;
 
   if (page==="log")     return <>{ErrorBanner}{HelloBanner}<DailyLogPage config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="weekly")  return <>{ErrorBanner}{HelloBanner}<WeeklyPage  config={config} onBack={()=>setPage("menu")}/></>;
