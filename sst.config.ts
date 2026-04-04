@@ -144,11 +144,19 @@ export default $config({
     });
 
     // Phase 3: Test SES email sending (temporary endpoint for validation)
-    api.route("GET /api/test-ses", {
-      handler: "backend/functions/test_ses.handler",
-      timeout: "10 seconds",
-      memory: "256 MB",
-    });
+    if ($app.stage === "dev") {
+      api.route("GET /api/test-ses", {
+        handler: "backend/functions/test_ses.handler",
+        timeout: "10 seconds",
+        memory: "256 MB",
+        permissions: [
+          {
+            actions: ["ses:SendEmail", "ses:SendRawEmail"],
+            resources: ["*"],
+          },
+        ],
+      });
+    }
 
     // TODO: Add PDF generation routes in Phase 2+
     // Example route with ReportLab layer:
