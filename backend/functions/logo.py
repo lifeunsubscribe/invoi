@@ -24,6 +24,29 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB in bytes
 # Allowed image formats (SVG excluded due to XSS risk - SVG can contain embedded JavaScript)
 ALLOWED_FORMATS = ['png', 'jpg', 'jpeg']
 
+# Magic byte signatures for image validation
+IMAGE_SIGNATURES = {
+    'png': b'\x89PNG\r\n\x1a\n',
+    'jpg': b'\xff\xd8\xff',
+    'jpeg': b'\xff\xd8\xff'
+}
+
+
+def _validate_image_magic_bytes(image_bytes, file_extension):
+    """
+    Validate that image bytes match the expected magic byte signature for the declared format.
+
+    Returns True if the image content matches the format, False otherwise.
+    """
+    if not image_bytes:
+        return False
+
+    signature = IMAGE_SIGNATURES.get(file_extension)
+    if not signature:
+        return False
+
+    return image_bytes.startswith(signature)
+
 
 def handler(event, context):
     """
@@ -236,6 +259,14 @@ def handle_upload(user_id, event, headers):
                 'body': json.dumps({'error': 'Invalid base64 encoding'})
             }
 
+        # Validate image content matches declared format (magic byte validation)
+        if not _validate_image_magic_bytes(image_bytes, file_extension):
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'error': f'Image content does not match declared format ({file_extension})'})
+            }
+
         # Validate file size
         if len(image_bytes) > MAX_FILE_SIZE:
             size_mb = len(image_bytes) / (1024 * 1024)
@@ -276,7 +307,7 @@ def handle_upload(user_id, event, headers):
         user['logoKey'] = s3_key
         user['logoSize'] = logo_size
 
-        updated_user = put_user(user)
+        put_user(user)
 
         return {
             'statusCode': 200,
@@ -343,7 +374,7 @@ def handle_delete(user_id, headers):
         user['logoKey'] = ''
         user['logoSize'] = 'medium'  # Reset to default
 
-        updated_user = put_user(user)
+        put_user(user)
 
         return {
             'statusCode': 200,
