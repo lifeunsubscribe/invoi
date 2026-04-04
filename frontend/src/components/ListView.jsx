@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 // Chrome styling (matches HistoryPage.jsx and CalendarView.jsx)
 const chrome = {
@@ -154,6 +154,20 @@ export default function ListView({ invoices, config, onInvoiceClick }) {
     return sorted;
   }, [filteredInvoices, sortBy, sortOrder]);
 
+  // Clear selections that are no longer in the filtered/sorted list
+  // This prevents bulk actions on filtered-out invoices
+  useEffect(() => {
+    setSelectedIds(prev => {
+      const visibleIds = new Set(sortedInvoices.map(inv => inv.invoiceId));
+      const filtered = new Set(Array.from(prev).filter(id => visibleIds.has(id)));
+      // Only update state if something changed to avoid unnecessary re-renders
+      if (filtered.size !== prev.size) {
+        return filtered;
+      }
+      return prev;
+    });
+  }, [sortedInvoices]);
+
   // Toggle individual invoice selection
   const handleToggleSelect = (invoiceId) => {
     setSelectedIds(prev => {
@@ -180,19 +194,16 @@ export default function ListView({ invoices, config, onInvoiceClick }) {
 
   // Bulk action handlers (UI-only per scope boundary)
   const handleBulkMarkPaid = () => {
-    console.log("Bulk mark as paid:", Array.from(selectedIds));
     // TODO: Backend integration in separate issue
     alert(`Mark ${selectedIds.size} invoice(s) as paid - Backend integration pending`);
   };
 
   const handleBulkExport = () => {
-    console.log("Bulk export:", Array.from(selectedIds));
     // TODO: Backend integration in separate issue
     alert(`Export ${selectedIds.size} invoice(s) - Backend integration pending`);
   };
 
   const handleBulkResend = () => {
-    console.log("Bulk resend:", Array.from(selectedIds));
     // TODO: Backend integration in separate issue
     alert(`Resend ${selectedIds.size} invoice(s) - Backend integration pending`);
   };
