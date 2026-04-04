@@ -133,8 +133,15 @@ const ALL_VITALS = [
 const DEFAULT_ENABLED_VITALS = ["temperature","bpSystolic","bpDiastolic","weight","pulse","o2sat"];
 
 const OCCUPATIONS = [
-  {id:"",                label:"General Service Provider"},
-  {id:"home-health-aide",label:"Home Health Aide"},
+  {id:"",                 label:"General Service Provider"},
+  {id:"home-health-aide", label:"Home Health Aide"},
+  {id:"tutor-instructor", label:"Tutor / Instructor"},
+  {id:"personal-trainer", label:"Personal Trainer"},
+  {id:"house-cleaner",    label:"House Cleaner"},
+  {id:"pet-sitter",       label:"Pet Sitter / Dog Walker"},
+  {id:"handyperson",      label:"Handyperson"},
+  {id:"caregiver",        label:"Caregiver"},
+  {id:"other",            label:"Other"},
 ];
 
 // Occupation-specific labels. Falls back to default ("") for anything not overridden.
@@ -148,7 +155,8 @@ const OCC_LABELS = {
     medsHeader: "Supplies / Materials",
     recipientCardTitle: "Service Recipient",
     recipientCardDesc: "The person or entity you provide service to.",
-    invoiceTitle: "Contractor Invoice",
+    invoiceTitle: "Service Invoice",
+    clientFieldLabel: "Client",
   },
   "home-health-aide": {
     recipientName: "Patient Name",
@@ -160,6 +168,91 @@ const OCC_LABELS = {
     recipientCardTitle: "Service Recipient",
     recipientCardDesc: "The patient you provide care for. Shows on invoices and logs.",
     invoiceTitle: "Home Health Invoice",
+    clientFieldLabel: "Agency",
+  },
+  "tutor-instructor": {
+    recipientName: "Student Name",
+    recipientAddress: "Student Address",
+    objective: "Learning Objectives",
+    objectivePlaceholder: "e.g., improve reading comprehension, SAT prep, master algebra",
+    vitalsHeader: "Metrics",
+    medsHeader: "Materials",
+    recipientCardTitle: "Student",
+    recipientCardDesc: "The student you teach.",
+    invoiceTitle: "Tutoring Invoice",
+    clientFieldLabel: "School / Family",
+  },
+  "personal-trainer": {
+    recipientName: "Client Name",
+    recipientAddress: "Client Address",
+    objective: "Fitness Goals",
+    objectivePlaceholder: "e.g., weight loss, muscle gain, marathon training, improve flexibility",
+    vitalsHeader: "Metrics",
+    medsHeader: "Equipment / Supplements",
+    recipientCardTitle: "Client",
+    recipientCardDesc: "The client you train.",
+    invoiceTitle: "Training Invoice",
+    clientFieldLabel: "Gym / Client",
+  },
+  "house-cleaner": {
+    recipientName: "Property Name",
+    recipientAddress: "Property Address",
+    objective: "Service Scope",
+    objectivePlaceholder: "e.g., deep clean kitchen, vacuum all rooms, laundry, windows",
+    vitalsHeader: "Metrics",
+    medsHeader: "Supplies",
+    recipientCardTitle: "Property",
+    recipientCardDesc: "The property you clean.",
+    invoiceTitle: "Cleaning Invoice",
+    clientFieldLabel: "Client",
+  },
+  "pet-sitter": {
+    recipientName: "Pet Name(s)",
+    recipientAddress: "Owner Address",
+    objective: "Care Instructions",
+    objectivePlaceholder: "e.g., feed twice daily, 30min walks, medications, special needs",
+    vitalsHeader: "Metrics",
+    medsHeader: "Supplies / Meds",
+    recipientCardTitle: "Pet(s)",
+    recipientCardDesc: "The pet(s) you care for.",
+    invoiceTitle: "Pet Care Invoice",
+    clientFieldLabel: "Pet Owner",
+  },
+  "handyperson": {
+    recipientName: "Property Name",
+    recipientAddress: "Property Address",
+    objective: "Work Scope",
+    objectivePlaceholder: "e.g., fix leaky faucet, install shelves, repair drywall, paint bedroom",
+    vitalsHeader: "Metrics",
+    medsHeader: "Materials",
+    recipientCardTitle: "Property",
+    recipientCardDesc: "The property you service.",
+    invoiceTitle: "Service Invoice",
+    clientFieldLabel: "Client",
+  },
+  "caregiver": {
+    recipientName: "Care Recipient Name",
+    recipientAddress: "Care Recipient Address",
+    objective: "Care Objectives",
+    objectivePlaceholder: "e.g., companionship, meal preparation, mobility assistance, medication reminders",
+    vitalsHeader: "Vitals",
+    medsHeader: "Medications",
+    recipientCardTitle: "Care Recipient",
+    recipientCardDesc: "The person you provide care for.",
+    invoiceTitle: "Caregiving Invoice",
+    clientFieldLabel: "Family",
+  },
+  "other": {
+    recipientName: "Recipient Name",
+    recipientAddress: "Recipient Address",
+    objective: "Service Objective",
+    objectivePlaceholder: "e.g., goals, key deliverables, recurring tasks",
+    vitalsHeader: "Metrics",
+    medsHeader: "Materials",
+    recipientCardTitle: "Service Recipient",
+    recipientCardDesc: "The person or entity you provide service to.",
+    invoiceTitle: "Service Invoice",
+    clientFieldLabel: "Client",
   },
 };
 
@@ -168,19 +261,23 @@ function getOccLabels(config) {
   return OCC_LABELS[occ] || OCC_LABELS[""];
 }
 
+// Helper to determine if occupation requires health-specific fields (vitals, medications)
+function isHealthOccupation(occupation) {
+  const healthOccupations = ["home-health-aide", "caregiver"];
+  return healthOccupations.includes(occupation || "");
+}
+
 const defaultConfig = {
   name:           "Jane Doe",
   address:        "123 Main Street, Denver, CO 80201",
   personalEmail:  "jane@email.com",
   rate:           18.0,
-  clientName:     "Sunrise Home Health Agency",
+  clientName:     "Client Agency",
   clientEmail:    "billing@clientagency.com",
   accountantEmail:"accountant@cpa.com",
-  patientName:    "",
-  patientAddress: "",
   template:       "morning-light",
   accent:         "#b76e79",
-  invoiceNote:    "Thank you for the privilege of caring for your clients.",
+  invoiceNote:    "Thank you for your business.",
   saveFolder:     deriveSaveFolder("Jane Doe"),
   clients:        [],
   activeClientId: "",
@@ -452,10 +549,12 @@ function TemplateLightHeader({ config, hours, week, totalHours, totalPay, theme 
   const t = theme || getTheme("morning-light");
   const isSerif = t.fontStyle === "serif";
   const headFont = isSerif ? "'Georgia',serif" : "sans-serif";
+  const activeClient = getActiveClient(config);
+  const occLabels = getOccLabels(config);
   return (
     <div style={{fontFamily:headFont,background:"white",width:"100%",minHeight:"100%"}}>
       <div style={{background:t.headerBg,borderBottom:t.headerBorder,padding:"34px 38px 28px",position:"relative"}}>
-        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7,fontFamily:"sans-serif"}}><span style={{fontSize:15}}>{t.emoji}</span> {getOccLabels(config).invoiceTitle}</div>
+        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7,fontFamily:"sans-serif"}}><span style={{fontSize:15}}>{t.emoji}</span> {occLabels.invoiceTitle}</div>
         <h1 style={{margin:0,fontSize:27,fontWeight:700,color:t.headerName,letterSpacing:-0.5}}>{config.name}</h1>
         <p style={{margin:"7px 0 3px",fontSize:13,color:t.headerMeta,fontFamily:"sans-serif"}}>{config.address}</p>
         <p style={{margin:0,fontSize:13,color:t.headerMeta,fontFamily:"sans-serif"}}>{config.personalEmail}</p>
@@ -469,9 +568,9 @@ function TemplateLightHeader({ config, hours, week, totalHours, totalPay, theme 
         <div><div style={{fontSize:10,fontFamily:"sans-serif",letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Billed To</div>
           <div style={{fontSize:15,fontWeight:700,color:t.textDark,fontFamily:"sans-serif"}}>{config.clientName}</div>
           <div style={{fontSize:13,fontFamily:"sans-serif",color:t.textMedium,marginTop:3}}>{config.clientEmail}</div></div>
-        {config.patientName && <div style={{marginRight:52}}><div style={{fontSize:10,fontFamily:"sans-serif",letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Service Recipient</div>
-          <div style={{fontSize:15,fontWeight:700,color:t.textDark,fontFamily:"sans-serif"}}>{config.patientName}</div>
-          {config.patientAddress && <div style={{fontSize:13,fontFamily:"sans-serif",color:t.textMedium,marginTop:3}}>{config.patientAddress}</div>}</div>}
+        {activeClient.name && <div style={{marginRight:52}}><div style={{fontSize:10,fontFamily:"sans-serif",letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>{occLabels.recipientCardTitle}</div>
+          <div style={{fontSize:15,fontWeight:700,color:t.textDark,fontFamily:"sans-serif"}}>{activeClient.name}</div>
+          {activeClient.address && <div style={{fontSize:13,fontFamily:"sans-serif",color:t.textMedium,marginTop:3}}>{activeClient.address}</div>}</div>}
         <div><div style={{fontSize:10,fontFamily:"sans-serif",letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Week Of</div>
           <div style={{fontSize:14,color:t.textDark,fontFamily:"sans-serif"}}>{week.start} – {week.end}</div></div>
       </div>
@@ -490,10 +589,12 @@ function TemplateLightHeader({ config, hours, week, totalHours, totalPay, theme 
 
 function TemplateDarkHeader({ config, hours, week, totalHours, totalPay, theme }) {
   const t = theme || getTheme("caring-hands");
+  const activeClient = getActiveClient(config);
+  const occLabels = getOccLabels(config);
   return (
     <div style={{fontFamily:"sans-serif",background:"white",width:"100%",minHeight:"100%"}}>
       <div style={{background:t.headerBg,padding:"34px 38px 28px",position:"relative"}}>
-        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:15}}>{t.emoji}</span> {getOccLabels(config).invoiceTitle}</div>
+        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:15}}>{t.emoji}</span> {occLabels.invoiceTitle}</div>
         <div style={{fontSize:27,fontWeight:700,color:t.headerName,marginBottom:7}}>{config.name}</div>
         <div style={{fontSize:13,color:t.headerMeta}}>{config.address}</div>
         <div style={{fontSize:13,color:t.headerMeta,marginTop:2}}>{config.personalEmail}</div>
@@ -508,9 +609,9 @@ function TemplateDarkHeader({ config, hours, week, totalHours, totalPay, theme }
         <div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Billed To</div>
           <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{config.clientName}</div>
           <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{config.clientEmail}</div></div>
-        {config.patientName && <div style={{marginRight:52}}><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Service Recipient</div>
-          <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{config.patientName}</div>
-          {config.patientAddress && <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{config.patientAddress}</div>}</div>}
+        {activeClient.name && <div style={{marginRight:52}}><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>{occLabels.recipientCardTitle}</div>
+          <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{activeClient.name}</div>
+          {activeClient.address && <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{activeClient.address}</div>}</div>}
         <div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Service Period</div>
           <div style={{fontSize:14,color:t.textDark}}>{week.start} – {week.end}</div></div>
       </div>
@@ -528,10 +629,12 @@ function TemplateDarkHeader({ config, hours, week, totalHours, totalPay, theme }
 
 function TemplateBotanical({ config, hours, week, totalHours, totalPay, theme }) {
   const t = theme || getTheme("garden");
+  const activeClient = getActiveClient(config);
+  const occLabels = getOccLabels(config);
   return (
     <div style={{fontFamily:"sans-serif",background:t.rowEven,width:"100%",minHeight:"100%"}}>
       <div style={{background:t.headerBg,padding:"34px 38px 28px",position:"relative"}}>
-        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:15}}>{t.emoji}</span> {getOccLabels(config).invoiceTitle}</div>
+        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:15}}>{t.emoji}</span> {occLabels.invoiceTitle}</div>
         <div style={{fontSize:27,fontWeight:500,color:t.headerName,letterSpacing:0.5}}>{config.name}</div>
         <div style={{fontSize:13,color:t.headerMeta,marginTop:6}}>{config.address}</div>
         <div style={{fontSize:13,color:t.headerMeta,marginTop:2}}>{config.personalEmail}</div>
@@ -546,9 +649,9 @@ function TemplateBotanical({ config, hours, week, totalHours, totalPay, theme })
         <div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Billed To</div>
           <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{config.clientName}</div>
           <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{config.clientEmail}</div></div>
-        {config.patientName && <div style={{marginRight:52}}><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Service Recipient</div>
-          <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{config.patientName}</div>
-          {config.patientAddress && <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{config.patientAddress}</div>}</div>}
+        {activeClient.name && <div style={{marginRight:52}}><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>{occLabels.recipientCardTitle}</div>
+          <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{activeClient.name}</div>
+          {activeClient.address && <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{activeClient.address}</div>}</div>}
         <div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Service Week</div>
           <div style={{fontSize:14,color:t.textDark}}>{week.start} – {week.end}</div></div>
       </div>
@@ -1295,7 +1398,8 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                   </div>
                 </div>
 
-                {/* Medications */}
+                {/* Medications - only for health occupations */}
+                {isHealthOccupation(draft.occupation) && (
                 <div style={{marginBottom:8}}>
                   <label style={labelStyle}>{occLabels.medsHeader}</label>
                   {(activeClient.meds||[]).length === 0 && (
@@ -1337,6 +1441,7 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                     + Add {occLabels.medsHeader === "Medications" ? "Medication" : "Item"}
                   </button>
                 </div>
+                )}
 
               {/* Multi-recipient management */}
               <div style={{borderTop:"1px solid #f0e8e0",paddingTop:12,marginTop:16}}>
@@ -3362,8 +3467,8 @@ function DailyLogPage({ config, onBack }) {
             {shiftHours && <span style={{fontSize:14,color:acc,fontWeight:600,marginLeft:4}}>{shiftHours} hrs</span>}
           </div>
 
-          {/* Vitals card */}
-          {activeVitals.length>0&&<div style={{background:"white",borderRadius:14,border:"1px solid #e8ddd4",padding:"14px 20px",flexShrink:0}}>
+          {/* Vitals card - only for health occupations */}
+          {isHealthOccupation(config.occupation) && activeVitals.length>0&&<div style={{background:"white",borderRadius:14,border:"1px solid #e8ddd4",padding:"14px 20px",flexShrink:0}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
               <div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:"#9a8070",fontWeight:600}}>{occLabels.vitalsHeader}</div>
               <button onClick={()=>setShowVitalsModal(true)} title={`Edit ${occLabels.vitalsHeader.toLowerCase()}`} style={{fontSize:11,color:acc,background:"none",border:`1px solid ${acc}40`,borderRadius:6,padding:"2px 8px",cursor:"pointer"}}>Edit</button>
@@ -3395,7 +3500,7 @@ function DailyLogPage({ config, onBack }) {
               </div>);})}
             </div>
           </div>}
-          {showVitalsModal&&<div style={{position:"fixed",inset:0,background:"rgba(44,24,16,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:16}} onClick={e=>{if(e.target===e.currentTarget)setShowVitalsModal(false);}}>
+          {isHealthOccupation(config.occupation) && showVitalsModal&&<div style={{position:"fixed",inset:0,background:"rgba(44,24,16,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:16}} onClick={e=>{if(e.target===e.currentTarget)setShowVitalsModal(false);}}>
             <div style={{background:"white",borderRadius:16,width:380,maxWidth:"90vw",overflow:"hidden",boxShadow:"0 12px 60px rgba(0,0,0,0.25)"}}>
               <div style={{background:chrome.titleBar,padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <div><div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:acc,fontWeight:700}}>Configure</div><div style={{fontSize:16,fontWeight:700,color:"#f0e0d0"}}>{occLabels.vitalsHeader} Metrics</div></div>
@@ -3428,8 +3533,8 @@ function DailyLogPage({ config, onBack }) {
               <div style={{padding:"12px 20px",borderTop:"1px solid #f0e8e0"}}><button onClick={()=>setShowVitalsModal(false)} style={{width:"100%",fontSize:14,fontWeight:700,padding:"10px 0",borderRadius:9,border:"none",background:acc,color:"white",cursor:"pointer"}}>Done</button></div>
             </div></div>}
 
-          {/* Medications checklist */}
-          {(medChecklist.length > 0 || (activeClient.meds||[]).length > 0 || activeClient.name) && (
+          {/* Medications checklist - only for health occupations */}
+          {isHealthOccupation(config.occupation) && (medChecklist.length > 0 || (activeClient.meds||[]).length > 0 || activeClient.name) && (
             <div style={{background:"white",borderRadius:14,border:"1px solid #e8ddd4",padding:"14px 20px",flexShrink:0}}>
               <div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:"#9a8070",fontWeight:600,marginBottom:10}}>{occLabels.medsHeader}</div>
               {medChecklist.map((med, idx) => {
