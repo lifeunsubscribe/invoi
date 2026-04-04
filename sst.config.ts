@@ -126,6 +126,16 @@ export default $config({
       link: [invoicesTable],
     });
 
+    // Phase 2: Submit weekly invoice (generate PDF, store in S3, save metadata)
+    // Uses TransactWriteItems to atomically increment invoice number and create record
+    api.route("POST /api/submit/weekly", {
+      handler: "backend/functions/submit_weekly.handler",
+      link: [usersTable, invoicesTable, bucket],
+      layers: [reportlabLayer.arn],
+      timeout: "30 seconds",
+      memory: "1024 MB",
+    });
+
     // Phase 2: Submit monthly report (aggregate weekly invoices into monthly PDF)
     api.route("POST /api/submit/monthly", {
       handler: "backend/functions/submit_monthly.handler",
