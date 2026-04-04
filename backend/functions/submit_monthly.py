@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import query_invoices, get_user, put_invoice
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
+from services.mail_service import send_monthly_email
 from botocore.exceptions import ClientError
 
 
@@ -19,7 +20,9 @@ def handler(event, context):
     Request body (JSON):
         {
             "year": 2026,
-            "month": 3
+            "month": 3,
+            "send": true,  // Optional: if true, send email after PDF generation (default: true)
+            "accountantEmail": "accountant@example.com"  // Optional: recipient for monthly report
         }
 
     Returns:
@@ -74,6 +77,8 @@ def handler(event, context):
 
         year = body.get('year')
         month = body.get('month')
+        send = body.get('send', True)  # Default to True for backward compatibility
+        accountant_email = body.get('accountantEmail', '')
 
         # Validate required parameters
         if not year or not month:
@@ -222,7 +227,7 @@ def handler(event, context):
             'userId': user_id,
             'invoiceId': report_id,
             'type': 'monthly',
-            'status': 'draft',  # Monthly reports start as draft (not sent yet)
+            'status': 'draft',  # Initial status (will be updated to 'sent' if email succeeds)
             'year': year_int,
             'month': month_int,
             'monthLabel': month_label,
@@ -231,24 +236,81 @@ def handler(event, context):
             'rate': rate,
             'totalPay': total_pay,
             'pdfKey': s3_key,
+            'sentAt': None,
+            'sentTo': [],
             'createdAt': datetime.now().isoformat()
         }
 
         put_invoice(report_metadata)
 
+        # Prepare response data
+        response_data = {
+            'reportId': report_id,
+            's3Key': s3_key,
+            'monthLabel': month_label,
+            'totalHours': total_hours,
+            'totalPay': total_pay,
+            'weekCount': len(week_data),
+            'status': report_metadata['status'],
+            'createdAt': report_metadata['createdAt']
+        }
+
+        # Phase 3: Send email via SES if send=True
+        # Email failures are handled gracefully - the report is saved successfully
+        # even if the email fails, and the user receives a warning instead of an error
+        if send:
+            email_recipients = []
+            email_warning = None
+
+            # Build recipient list (only accountant for monthly reports)
+            if accountant_email:
+                email_recipients.append(accountant_email)
+
+            if email_recipients:
+                try:
+                    # Send monthly report email with PDF attachment
+                    send_monthly_email(
+                        to_addresses=email_recipients,
+                        user_name=user_config.get('name', 'Contractor'),
+                        month_label=month_label,
+                        total_hours=total_hours,
+                        total_pay=total_pay,
+                        pdf_data=pdf_bytes,
+                        pdf_filename=f"{report_id}.pdf",
+                        from_email="noreply@goinvoi.com"
+                    )
+
+                    # Update report status to 'sent' and record email metadata
+                    report_metadata['status'] = 'sent'
+                    report_metadata['sentAt'] = datetime.now().isoformat()
+                    report_metadata['sentTo'] = email_recipients
+
+                    # Persist updated status to DynamoDB
+                    put_invoice(report_metadata)
+
+                    response_data['sent'] = email_recipients
+                    response_data['status'] = 'sent'
+
+                except Exception as e:
+                    # Email failed but report was saved successfully
+                    # Return success with warning rather than failing the entire operation
+                    print(f"Email send failed: {str(e)}")
+                    email_warning = f"Report saved but email failed: {str(e)}"
+                    response_data['sent'] = []
+                    response_data['emailWarning'] = email_warning
+            else:
+                # No recipients configured
+                response_data['sent'] = []
+                response_data['emailWarning'] = "No email recipient configured"
+        else:
+            # Send=False, just save as draft
+            response_data['sent'] = []
+
         # Return report metadata including S3 key
         return {
             'statusCode': 200,
             'headers': headers,
-            'body': json.dumps({
-                'reportId': report_id,
-                's3Key': s3_key,
-                'monthLabel': month_label,
-                'totalHours': total_hours,
-                'totalPay': total_pay,
-                'weekCount': len(week_data),
-                'createdAt': report_metadata['createdAt']
-            })
+            'body': json.dumps(response_data)
         }
 
     except json.JSONDecodeError:

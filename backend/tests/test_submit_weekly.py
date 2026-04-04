@@ -403,6 +403,103 @@ class TestSubmitWeekly:
         assert 'error' in body
         assert 'JSON' in body['error']
 
+    def test_submit_weekly_with_send(self):
+        """POST with saveOnly=False should send email and update status to 'sent'"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'hours': {
+                    'Monday': 8,
+                    'Tuesday': 8,
+                    'Wednesday': 8,
+                    'Thursday': 8,
+                    'Friday': 8,
+                    'Saturday': 0,
+                    'Sunday': 0
+                },
+                'week': {
+                    'start': '2026-03-24',
+                    'end': '2026-03-30',
+                    'invNum': 'INV-20260324'
+                },
+                'clientEmail': 'client@example.com',
+                'accountantEmail': 'accountant@example.com',
+                'saveOnly': False  # Phase 3: send email
+            })
+        }
+
+        # Mock user config with all required fields
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'address': '123 Main St',
+            'personalEmail': 'test@example.com',
+            'rate': 28.00,
+            'template': 'morning-light',
+            'signatureFont': 'Dancing Script',
+            'paymentTerms': 'receipt',
+            'taxEnabled': False,
+            'invoiceNumberConfig': {
+                'prefix': 'INV',
+                'includeYear': False,
+                'separator': '-',
+                'padding': 3,
+                'nextNum': 1
+            },
+            'activeClientId': 'client-1',
+            'clients': [
+                {
+                    'id': 'client-1',
+                    'name': 'Test Client',
+                    'email': 'client@example.com'
+                }
+            ]
+        }
+
+        # Mock PDF generation returning bytes
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_weekly.get_user', return_value=mock_user):
+                with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
+                    with patch('functions.submit_weekly.save_pdf_to_s3'):
+                        with patch('functions.submit_weekly.send_weekly_email') as mock_send_email:
+                            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                                with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                    # Mock DynamoDB client for TransactWriteItems
+                                    mock_dynamodb_client = MagicMock()
+                                    mock_boto_client.return_value = mock_dynamodb_client
+
+                                    # Mock DynamoDB resource for put_item
+                                    mock_table = MagicMock()
+                                    mock_boto_resource.return_value.Table.return_value = mock_table
+
+                                    response = handler(event, {})
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert 'sent' in body
+        assert body['sent'] == ['client@example.com', 'accountant@example.com']
+        assert body['status'] == 'sent'
+
+        # Verify email was sent with correct parameters
+        mock_send_email.assert_called_once()
+        call_args = mock_send_email.call_args
+        assert call_args[1]['to_addresses'] == ['client@example.com', 'accountant@example.com']
+        assert call_args[1]['user_name'] == 'Test User'
+
     def test_submit_weekly_transaction_cancelled(self):
         """POST should handle TransactionCanceledException gracefully"""
         event = {
