@@ -16,7 +16,8 @@ from botocore.exceptions import ClientError
 
 # S3 client for logo fetching
 s3_client = boto3.client('s3')
-BUCKET_NAME = os.environ.get('SST_Resource_InvoiStorage')
+# SST Ion provides bucket name via SST_Resource_<name>_name when linked
+BUCKET_NAME = os.environ.get('SST_Resource_InvoiStorage_name')
 
 
 def handler(event, context):

@@ -885,10 +885,10 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
   const handleLogoFile = async (file) => {
     setLogoError(null);
 
-    // Validate file type
-    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+    // Validate file type (SVG excluded due to XSS security risk)
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
     if (!allowedTypes.includes(file.type)) {
-      setLogoError('Please upload a PNG, JPG, or SVG file');
+      setLogoError('Please upload a PNG or JPG file');
       return;
     }
 
@@ -1002,8 +1002,28 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
     }
   };
 
-  const handleLogoSizeChange = (size) => {
+  const handleLogoSizeChange = async (size) => {
+    // Update draft state immediately for responsive UI
     setDraft(d => ({...d, logoSize: size}));
+
+    // Auto-save logo size preference to backend
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE}/api/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token,
+        },
+        body: JSON.stringify({...draft, logoSize: size})
+      });
+
+      if (!response.ok) {
+        console.error('Failed to save logo size preference');
+      }
+    } catch (error) {
+      console.error('Error saving logo size:', error);
+    }
   };
 
   const updateClient = (field, value) => {
@@ -1080,6 +1100,34 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
       setTimeout(()=>folderRef.current.scrollIntoView({ behavior:"smooth", block:"center" }), 120);
     }
   },[scrollToFolder]);
+
+  // Fetch logo from backend if user has one configured
+  useEffect(() => {
+    if (draft.logoKey && !logoPreview) {
+      const fetchLogo = async () => {
+        try {
+          const token = getAuthToken();
+          const response = await fetch(`${API_BASE}/api/logo`, {
+            method: 'GET',
+            headers: {
+              'Authorization': token,
+            }
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            setLogoPreview(result.logoData);
+          } else if (response.status !== 404) {
+            // Only log non-404 errors (404 just means no logo)
+            console.error('Failed to fetch logo:', response.status);
+          }
+        } catch (error) {
+          console.error('Error fetching logo:', error);
+        }
+      };
+      fetchLogo();
+    }
+  }, [draft.logoKey, logoPreview]);
 
   // Save profile changes to persistent storage via API
   const handleSave = async () => {
@@ -1355,16 +1403,16 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                  accept="image/png,image/jpeg,image/jpg"
                   onChange={handleLogoInputChange}
                   style={{display: 'none'}}
                 />
                 {logoUploading ? (
                   <div style={{color: '#9a8070', fontSize: 14}}>Uploading...</div>
-                ) : (logoPreview || draft.logoKey) ? (
+                ) : logoPreview ? (
                   <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12}}>
                     <img
-                      src={logoPreview || `${API_BASE}/api/logo/${draft.logoKey}`}
+                      src={logoPreview}
                       alt="Logo preview"
                       style={{
                         maxWidth: '200px',
@@ -1393,7 +1441,7 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                       Drop logo here or click to upload
                     </div>
                     <div style={{fontSize: 12, color: '#9a8070'}}>
-                      PNG, JPG, or SVG • At least 300×300px • Max 5MB
+                      PNG or JPG • At least 300×300px • Max 5MB
                     </div>
                   </div>
                 )}
@@ -1415,7 +1463,7 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
               )}
 
               {/* Logo size slider */}
-              {(logoPreview || draft.logoKey) && (
+              {logoPreview && (
                 <div style={{marginBottom: 16}}>
                   <label style={labelStyle}>Logo Size on Invoices</label>
                   <div style={{display: 'flex', gap: 8, marginTop: 8}}>
@@ -1444,7 +1492,7 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
               )}
 
               {/* Live preview */}
-              {(logoPreview || draft.logoKey) && (
+              {logoPreview && (
                 <div>
                   <label style={labelStyle}>Preview on Invoice</label>
                   <div style={{
@@ -1471,7 +1519,7 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                           </div>
                         </div>
                         <img
-                          src={logoPreview || `${API_BASE}/api/logo/${draft.logoKey}`}
+                          src={logoPreview}
                           alt="Logo"
                           style={{
                             maxWidth: draft.logoSize === 'small' ? '40px' : draft.logoSize === 'large' ? '80px' : '60px',

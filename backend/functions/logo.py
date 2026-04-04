@@ -15,29 +15,31 @@ from services.db_service import get_user, put_user
 s3_client = boto3.client('s3')
 
 # Get bucket name from SST Resource environment variable
-BUCKET_NAME = os.environ.get('SST_Resource_InvoiStorage')
+# SST Ion provides bucket name via SST_Resource_<name>_name when linked
+BUCKET_NAME = os.environ.get('SST_Resource_InvoiStorage_name')
 
 # Maximum logo file size (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB in bytes
 
-# Allowed image formats
-ALLOWED_FORMATS = ['png', 'jpg', 'jpeg', 'svg']
+# Allowed image formats (SVG excluded due to XSS risk - SVG can contain embedded JavaScript)
+ALLOWED_FORMATS = ['png', 'jpg', 'jpeg']
 
 
 def handler(event, context):
     """
-    Lambda handler for POST/DELETE /api/logo — upload or remove logo image.
+    Lambda handler for GET/POST/DELETE /api/logo — retrieve, upload, or remove logo image.
 
+    GET: Retrieve logo from S3 as base64-encoded data URL
     POST: Upload logo to S3, update user record with logoKey and logoSize
     DELETE: Remove logo from S3, clear logoKey from user record
 
-    Both methods require valid JWT in Authorization header.
+    All methods require valid JWT in Authorization header.
     """
     # CORS headers for all responses
     headers = {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }
 
@@ -73,7 +75,9 @@ def handler(event, context):
             }
 
         # Route to appropriate handler
-        if http_method == 'POST':
+        if http_method == 'GET':
+            return handle_get(user_id, headers)
+        elif http_method == 'POST':
             return handle_upload(user_id, event, headers)
         elif http_method == 'DELETE':
             return handle_delete(user_id, headers)
@@ -91,6 +95,72 @@ def handler(event, context):
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Internal server error'})
+        }
+
+
+def handle_get(user_id, headers):
+    """
+    Handle GET /api/logo - retrieve logo from S3 as base64-encoded data URL.
+
+    Returns the logo image as a data URL that can be directly used in <img> src attributes.
+    """
+    try:
+        # Get user record to find logo key
+        user = get_user(user_id)
+
+        if not user or not user.get('logoKey'):
+            # No logo uploaded
+            return {
+                'statusCode': 404,
+                'headers': headers,
+                'body': json.dumps({'error': 'No logo found for this user'})
+            }
+
+        logo_key = user['logoKey']
+
+        # Fetch logo from S3
+        try:
+            response = s3_client.get_object(Bucket=BUCKET_NAME, Key=logo_key)
+            logo_bytes = response['Body'].read()
+            content_type = response.get('ContentType', 'application/octet-stream')
+
+            # Encode as base64 data URL
+            base64_data = base64.b64encode(logo_bytes).decode('utf-8')
+            data_url = f"data:{content_type};base64,{base64_data}"
+
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'logoData': data_url,
+                    'logoSize': user.get('logoSize', 'medium'),
+                    'logoKey': logo_key
+                })
+            }
+
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            if error_code == 'NoSuchKey':
+                # Logo key exists in user record but file is missing from S3
+                return {
+                    'statusCode': 404,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Logo file not found in storage'})
+                }
+            else:
+                print(f"S3 error fetching logo: {error_code} - {str(e)}")
+                return {
+                    'statusCode': 500,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Failed to retrieve logo from storage'})
+                }
+
+    except Exception as e:
+        print(f"Unexpected error in logo retrieval: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': 'Failed to retrieve logo'})
         }
 
 
@@ -129,23 +199,21 @@ def handle_upload(user_id, event, headers):
 
         # Parse data URL and extract format and base64 data
         # Expected format: data:image/png;base64,iVBORw0KG...
-        data_url_pattern = r'^data:image/(png|jpe?g|svg\+xml);base64,(.+)$'
+        data_url_pattern = r'^data:image/(png|jpe?g);base64,(.+)$'
         match = re.match(data_url_pattern, image_data, re.IGNORECASE)
 
         if not match:
             return {
                 'statusCode': 400,
                 'headers': headers,
-                'body': json.dumps({'error': 'Invalid image data URL format. Expected data:image/[png|jpg|svg];base64,...'})
+                'body': json.dumps({'error': 'Invalid image data URL format. Expected data:image/[png|jpg];base64,...'})
             }
 
         format_from_url = match.group(1).lower()
         base64_data = match.group(2)
 
-        # Normalize format (svg+xml -> svg)
-        if format_from_url == 'svg+xml':
-            file_extension = 'svg'
-        elif format_from_url == 'jpeg':
+        # Normalize format (jpeg -> jpg)
+        if format_from_url == 'jpeg':
             file_extension = 'jpg'
         else:
             file_extension = format_from_url
@@ -155,7 +223,7 @@ def handle_upload(user_id, event, headers):
             return {
                 'statusCode': 400,
                 'headers': headers,
-                'body': json.dumps({'error': f'Image format {file_extension} not allowed. Use PNG, JPG, or SVG.'})
+                'body': json.dumps({'error': f'Image format {file_extension} not allowed. Use PNG or JPG only.'})
             }
 
         # Decode base64 data
@@ -181,8 +249,7 @@ def handle_upload(user_id, event, headers):
         content_type_map = {
             'png': 'image/png',
             'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg',
-            'svg': 'image/svg+xml'
+            'jpeg': 'image/jpeg'
         }
         content_type = content_type_map.get(file_extension, 'application/octet-stream')
 

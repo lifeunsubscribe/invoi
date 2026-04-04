@@ -179,7 +179,14 @@ export default $config({
       memory: "256 MB",
     });
 
-    // Phase 4: Logo upload and deletion
+    // Phase 4: Logo upload, retrieval, and deletion
+    api.route("GET /api/logo", {
+      handler: "backend/functions/logo.handler",
+      link: [usersTable, bucket],
+      timeout: "10 seconds",
+      memory: "512 MB",
+    });
+
     api.route("POST /api/logo", {
       handler: "backend/functions/logo.handler",
       link: [usersTable, bucket],
