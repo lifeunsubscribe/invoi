@@ -13,6 +13,17 @@ export default $config({
     const googleClientId = new sst.Secret("GoogleClientId");
     const googleClientSecret = new sst.Secret("GoogleClientSecret");
 
+    // SES Email Identity for sending invoices from noreply@goinvoi.com
+    // Verifies the goinvoi.com domain and configures DKIM signing
+    const emailIdentity = new aws.ses.EmailIdentity("GoinvoiDomain", {
+      email: "goinvoi.com",
+    });
+
+    // Enable DKIM signing for email authentication
+    const domainDkim = new aws.ses.DomainDkim("GoinvoiDomainDkim", {
+      domain: emailIdentity.email,
+    });
+
     // Cognito User Pool for authentication
     // Uses email as username for sign-in, creates stage-specific hosted UI domain
     const userPool = new sst.aws.CognitoUserPool("InvoiUserPool", {
@@ -132,6 +143,32 @@ export default $config({
       memory: "512 MB",
     });
 
+    // Phase 3: Update invoice status (mark paid, sent, etc.)
+    api.route("PATCH /api/invoices/{id}/status", {
+      handler: "backend/functions/invoices.handler",
+      link: [invoicesTable],
+    });
+
+    // Phase 3: Test SES email sending (temporary endpoint for validation)
+    // Restricted to dev stage and requires TEST_SES_SECRET header for authentication
+    if ($app.stage === "dev") {
+      const testSesSecret = new sst.Secret("TestSesSecret");
+      api.route("GET /api/test-ses", {
+        handler: "backend/functions/test_ses.handler",
+        timeout: "10 seconds",
+        memory: "256 MB",
+        link: [testSesSecret],
+        permissions: [
+          {
+            actions: ["ses:SendEmail", "ses:SendRawEmail"],
+            resources: [
+              $interpolate`arn:aws:ses:${aws.getRegionOutput().name}:${aws.getCallerIdentityOutput().accountId}:identity/${emailIdentity.email}`,
+            ],
+          },
+        ],
+      });
+    }
+
     // TODO: Add PDF generation routes in Phase 2+
     // Example route with ReportLab layer:
     // api.route("POST /api/invoices/generate", {
@@ -166,6 +203,8 @@ export default $config({
       userPool: userPool.id,
       userPoolClient: userPoolClient.id,
       hostedUI: userPool.domainUrl,
+      sesIdentity: emailIdentity.email,  // SES verified domain
+      sesDkimTokens: domainDkim.dkimTokens,  // DKIM tokens for DNS configuration
     };
   },
 });
