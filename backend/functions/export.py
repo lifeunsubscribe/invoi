@@ -279,6 +279,9 @@ def _handle_zip_export(user_id, invoices, headers):
         # Create ZIP in memory (avoids Lambda /tmp filesystem quota)
         zip_buffer = io.BytesIO()
 
+        # Track failures to inform user
+        failed_pdfs = []
+
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             pdf_count = 0
 
@@ -297,8 +300,9 @@ def _handle_zip_export(user_id, invoices, headers):
                         zip_file.writestr(filename, pdf_data)
                         pdf_count += 1
                     except ClientError as e:
+                        error_msg = f"Invoice PDF for {invoice_id}"
                         print(f"Warning: Could not fetch PDF for {invoice_id}: {str(e)}")
-                        # Continue with other invoices
+                        failed_pdfs.append(error_msg)
 
                 # Add log PDF if available
                 log_pdf_key = invoice.get('logPdfKey')
@@ -311,8 +315,9 @@ def _handle_zip_export(user_id, invoices, headers):
                         zip_file.writestr(filename, log_pdf_data)
                         pdf_count += 1
                     except ClientError as e:
+                        error_msg = f"Log PDF for {invoice_id}"
                         print(f"Warning: Could not fetch log PDF for {invoice_id}: {str(e)}")
-                        # Continue with other invoices
+                        failed_pdfs.append(error_msg)
 
         # Check if we successfully added any PDFs
         if pdf_count == 0:
@@ -350,16 +355,25 @@ def _handle_zip_export(user_id, invoices, headers):
             ExpiresIn=3600  # 1 hour
         )
 
+        response_body = {
+            'format': 'zip',
+            'downloadUrl': signed_url,
+            'expiresIn': 3600,
+            'invoiceCount': len(invoices),
+            'pdfCount': pdf_count
+        }
+
+        # Include failure information if any PDFs failed to fetch
+        if failed_pdfs:
+            response_body['warnings'] = {
+                'failedPdfs': failed_pdfs,
+                'message': f'{len(failed_pdfs)} PDF(s) could not be included in the export'
+            }
+
         return {
             'statusCode': 200,
             'headers': headers,
-            'body': json.dumps({
-                'format': 'zip',
-                'downloadUrl': signed_url,
-                'expiresIn': 3600,
-                'invoiceCount': len(invoices),
-                'pdfCount': pdf_count
-            })
+            'body': json.dumps(response_body)
         }
 
     except ClientError as e:
