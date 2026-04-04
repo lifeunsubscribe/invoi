@@ -148,8 +148,8 @@ export default function HistoryPage({ config, onBack }) {
         setInvoices(data.invoices || []);
       } catch (err) {
         console.error("Error fetching invoices:", err);
-        // Gracefully handle API not being ready yet
-        setError(null);
+        // Show actual errors to the user
+        setError(err.message || "An unexpected error occurred");
         setInvoices([]);
       } finally {
         setLoading(false);
