@@ -432,6 +432,30 @@ class TestAuthAndValidation:
         body = json.loads(response['body'])
         assert 'format' in body['error'].lower()
 
+    def test_export_with_too_many_invoices_returns_400(self):
+        """POST /api/export with more than 100 invoices should return 400"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'invoiceIds': [f'INV-{i:04d}' for i in range(101)],  # 101 invoices
+                'format': 'csv'
+            })
+        }
+
+        response = handler(event, {})
+
+        assert response['statusCode'] == 400
+        body = json.loads(response['body'])
+        assert 'cannot export more than' in body['error'].lower() or '100' in body['error']
+
     def test_export_with_invalid_json_returns_400(self):
         """POST /api/export with invalid JSON should return 400"""
         event = {

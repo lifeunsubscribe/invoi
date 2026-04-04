@@ -90,6 +90,15 @@ def handler(event, context):
                 'body': json.dumps({'error': 'invoiceIds must be a non-empty array'})
             }
 
+        # Limit number of invoices to prevent resource exhaustion
+        MAX_INVOICE_COUNT = 100
+        if len(invoice_ids) > MAX_INVOICE_COUNT:
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'error': f'Cannot export more than {MAX_INVOICE_COUNT} invoices at once'})
+            }
+
         if export_format not in ['zip', 'csv']:
             return {
                 'statusCode': 400,
