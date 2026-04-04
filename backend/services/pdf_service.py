@@ -17,7 +17,7 @@ Main Functions:
 
 Helpers:
     save_pdf_to_s3(pdf_bytes, bucket_name, key) -> str
-    _format_invoice_number(config, invoice_type) -> str
+    format_invoice_number(config, invoice_type) -> str
     _calculate_due_date(invoice_date, payment_terms) -> str
 """
 
@@ -178,7 +178,7 @@ def _calculate_due_date(invoice_date, payment_terms):
     return due_date.strftime('%Y-%m-%d')
 
 
-def _format_invoice_number(config, invoice_type='weekly'):
+def format_invoice_number(config, invoice_type='weekly'):
     """
     Generate next invoice number based on user's numbering configuration.
 
@@ -355,7 +355,7 @@ def render_weekly_pdf(config, hours, week, template_id,
     # Generate invoice number if not provided
     if invoice_number is None:
         # Try week.invNum first (legacy), then generate from config
-        invoice_number = week.get('invNum') or _format_invoice_number(config, 'weekly')
+        invoice_number = week.get('invNum') or format_invoice_number(config, 'weekly')
 
     # Calculate due date based on payment terms
     if invoice_date is None:
@@ -460,7 +460,7 @@ def render_monthly_pdf(config, week_data, month_label,
 
     # Generate invoice number if not provided
     if invoice_number is None:
-        invoice_number = _format_invoice_number(config, 'monthly')
+        invoice_number = format_invoice_number(config, 'monthly')
 
     # Calculate due date based on payment terms
     if invoice_date is None:

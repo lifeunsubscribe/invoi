@@ -8,7 +8,7 @@ import boto3
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_user
-from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, _format_invoice_number
+from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number
 from botocore.exceptions import ClientError
 
 
@@ -294,12 +294,9 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
     Returns:
         tuple: (invoice_number: str, invoice_metadata: dict)
     """
-    # Get current invoice number config
-    invoice_num_config = user_config.get('invoiceNumberConfig', {})
-    current_num = invoice_num_config.get('nextNum', 1)
-
     # Generate invoice number with current counter value
-    invoice_number = _format_invoice_number(user_config, 'weekly')
+    # Note: format_invoice_number reads nextNum from config internally
+    invoice_number = format_invoice_number(user_config, 'weekly')
 
     # Calculate totals
     total_hours = sum(float(hours.get(day, 0)) for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
