@@ -3,6 +3,8 @@ import { getAuthToken, isAuthenticated } from "./auth.jsx";
 import HistoryPage from "./components/HistoryPage.jsx";
 import LandingPage from "./components/LandingPage.jsx";
 import ImportPage from "./components/ImportPage.jsx";
+import PrivacyPolicy from "./components/PrivacyPolicy.jsx";
+import TermsOfService from "./components/TermsOfService.jsx";
 
 // API configuration - VITE_API_URL is injected by SST during deployment
 // For local development with `npx sst dev`, the URL is automatically provided
@@ -3747,12 +3749,17 @@ export default function App() {
     );
   }
 
+  // [Phase 6] Legal pages accessible to both authenticated and unauthenticated users
+  // Must be checked BEFORE authentication to allow public access (required for Google OAuth approval)
+  if (page==="privacy") return <PrivacyPolicy onBack={()=>setPage("menu")}/>;
+  if (page==="terms")   return <TermsOfService onBack={()=>setPage("menu")}/>;
+
   // [Phase 5] Show marketing landing page for unauthenticated users
   // This is the public-facing page at goinvoi.com root that explains the product
   // and provides "Sign in with Google" CTAs. Once OAuth is configured, users will
   // authenticate and be redirected to the dashboard (DashboardPage below).
   if (!isAuthenticated()) {
-    return <LandingPage onSignIn={handleSignIn} />;
+    return <LandingPage onSignIn={handleSignIn} onNavigate={setPage} />;
   }
 
   // Show error banner if config fetch failed (but continue with defaults)
