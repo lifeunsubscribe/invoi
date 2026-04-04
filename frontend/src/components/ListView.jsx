@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { getAuthToken } from "../auth.jsx";
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -69,7 +69,7 @@ function getUniqueClients(invoices) {
  * - Bulk action bar: mark paid, export, resend
  * - Tap row opens invoice detail panel
  */
-export default function ListView({ invoices, config, onInvoiceClick }) {
+export default function ListView({ invoices, config, onInvoiceClick, onRefresh }) {
   // Filter state
   const [statusFilter, setStatusFilter] = useState("all");
   const [clientFilter, setClientFilter] = useState("all");
@@ -221,6 +221,9 @@ export default function ListView({ invoices, config, onInvoiceClick }) {
         return;
       }
 
+      // Use ref to track progress count to avoid race conditions
+      const progressCountRef = { current: 0 };
+
       // Process all invoices in parallel for speed
       const results = await Promise.allSettled(
         invoiceIds.map(async (invoiceId) => {
@@ -237,8 +240,9 @@ export default function ListView({ invoices, config, onInvoiceClick }) {
             throw new Error(`Failed to mark ${invoiceId} as paid`);
           }
 
-          // Update progress (increment completed count)
-          setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
+          // Update progress using ref to prevent race condition
+          progressCountRef.current += 1;
+          setBulkProgress(prev => ({ ...prev, current: progressCountRef.current }));
           return invoiceId;
         })
       );
@@ -257,6 +261,11 @@ export default function ListView({ invoices, config, onInvoiceClick }) {
       // Clear selections only if at least one operation succeeded
       if (successful > 0) {
         setSelectedIds(new Set());
+      }
+
+      // Refresh invoice data to show updated statuses
+      if (successful > 0 && onRefresh) {
+        await onRefresh();
       }
 
     } catch (error) {
@@ -389,6 +398,11 @@ export default function ListView({ invoices, config, onInvoiceClick }) {
       // Clear selections only if at least one operation succeeded
       if (successful > 0) {
         setSelectedIds(new Set());
+      }
+
+      // Refresh invoice data to show updated statuses
+      if (successful > 0 && onRefresh) {
+        await onRefresh();
       }
 
     } catch (error) {
