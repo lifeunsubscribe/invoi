@@ -5,21 +5,82 @@ Sends invoice PDFs via AWS SES.
 Email body template functions carried over from desktop app.
 
 Functions:
-    send_email(to_addresses, subject, body_text, attachments) -> dict
+    send_email(to_addresses, subject, body_text, attachments, from_email) -> dict
     create_weekly_email_body(name, week_start, week_end, total_hours, total_pay) -> str
     create_weekly_with_logs_email_body(name, week_start, week_end, total_hours, total_pay) -> str
     create_monthly_email_body(name, month_label, total_hours, total_pay) -> str
 """
 
 import boto3
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+from botocore.exceptions import ClientError
 
 
-def send_email(to_addresses, subject, body_text, attachments=None):
+def send_email(to_addresses, subject, body_text, attachments=None, from_email="noreply@goinvoi.com"):
     """
-    Send email via AWS SES.
-    TODO: Implement in Phase 3 (Email).
+    Send email via AWS SES with optional PDF attachments.
+
+    Args:
+        to_addresses: list of str, recipient email addresses
+        subject: str, email subject line
+        body_text: str, plain text email body
+        attachments: list of dict, optional. Each dict has:
+            - 'filename': str, name of attachment (e.g., "invoice.pdf")
+            - 'data': bytes, file content
+        from_email: str, sender address (default: noreply@goinvoi.com)
+
+    Returns:
+        dict: SES response with MessageId on success
+
+    Raises:
+        ClientError: if SES send fails
+        ValueError: if to_addresses is empty or invalid
     """
-    raise NotImplementedError("SES email sending not yet implemented")
+    if not to_addresses:
+        raise ValueError("to_addresses cannot be empty")
+
+    # Ensure to_addresses is a list
+    if isinstance(to_addresses, str):
+        to_addresses = [to_addresses]
+
+    # Create MIME multipart message
+    msg = MIMEMultipart()
+    msg['Subject'] = subject
+    msg['From'] = from_email
+    msg['To'] = ', '.join(to_addresses)
+
+    # Attach body text
+    msg.attach(MIMEText(body_text, 'plain'))
+
+    # Attach PDF files if provided
+    if attachments:
+        for attachment in attachments:
+            part = MIMEApplication(attachment['data'])
+            part.add_header(
+                'Content-Disposition',
+                'attachment',
+                filename=attachment['filename']
+            )
+            msg.attach(part)
+
+    # Send via SES
+    ses_client = boto3.client('ses')
+
+    try:
+        response = ses_client.send_raw_email(
+            Source=from_email,
+            Destinations=to_addresses,
+            RawMessage={'Data': msg.as_string()}
+        )
+        return response
+    except ClientError as e:
+        # Log error and re-raise
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        print(f"SES send failed: {error_code} - {error_message}")
+        raise
 
 
 def create_weekly_email_body(name, week_start, week_end, total_hours, total_pay):
