@@ -103,6 +103,15 @@ export default $config({
       },
     });
 
+    // JWT Authorizer for protected routes
+    api.addAuthorizer({
+      name: "cognito",
+      jwt: {
+        issuer: $interpolate`https://cognito-idp.${aws.getRegionOutput().name}.amazonaws.com/${userPool.id}`,
+        audiences: [userPoolClient.id],
+      },
+    });
+
     // TODO: REMOVE AFTER PHASE 0 - Temporary route for end-to-end verification only
     // Phase 0: Hello endpoint for end-to-end verification
     api.route("GET /hello", {
@@ -177,6 +186,15 @@ export default $config({
       link: [invoicesTable, bucket],
       timeout: "10 seconds",
       memory: "256 MB",
+    });
+
+    // Phase 4: Export invoices as ZIP or CSV
+    api.route("POST /api/export", {
+      handler: "backend/functions/export.handler",
+      link: [invoicesTable, bucket],
+      timeout: "30 seconds",
+      memory: "1024 MB",
+      auth: { jwt: { authorizer: "cognito" } },
     });
 
     // Phase 4: Logo upload, retrieval, and deletion
