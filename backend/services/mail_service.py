@@ -183,6 +183,9 @@ def send_weekly_email(to_addresses, user_name, week_start, week_end, total_hours
     if not pdf_data:
         raise ValueError("pdf_data cannot be empty")
 
+    if not pdf_filename:
+        raise ValueError("pdf_filename cannot be empty")
+
     # Generate appropriate email body based on whether logs are included
     if include_logs:
         if not log_pdf_data or not log_pdf_filename:
@@ -246,6 +249,9 @@ def send_monthly_email(to_addresses, user_name, month_label, total_hours,
 
     if not pdf_data:
         raise ValueError("pdf_data cannot be empty")
+
+    if not pdf_filename:
+        raise ValueError("pdf_filename cannot be empty")
 
     # Generate email body
     body_text = create_monthly_email_body(user_name, month_label, total_hours, total_pay)
