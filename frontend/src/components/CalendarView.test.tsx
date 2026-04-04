@@ -276,4 +276,109 @@ describe('CalendarView', () => {
     expect(screen.getByText(/\$1120/)).toBeInTheDocument()
     expect(screen.getByText(/\$980/)).toBeInTheDocument()
   })
+
+  describe('Keyboard Accessibility', () => {
+    it('activates invoice pill when Enter key is pressed', () => {
+      const onInvoiceClickMock = vi.fn()
+      render(<CalendarView invoices={mockInvoices} config={mockConfig} onInvoiceClick={onInvoiceClickMock} />)
+
+      // Find an invoice pill button
+      const pill = screen.getByLabelText(/Invoice for Sunrise Home Health/)
+
+      // Press Enter key
+      fireEvent.keyDown(pill, { key: 'Enter', code: 'Enter' })
+
+      // Should have called the handler with the invoice
+      expect(onInvoiceClickMock).toHaveBeenCalledTimes(1)
+      expect(onInvoiceClickMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invoiceId: 'INV-20260401',
+          clientId: 'Sunrise Home Health'
+        })
+      )
+    })
+
+    it('activates invoice pill when Space key is pressed', () => {
+      const onInvoiceClickMock = vi.fn()
+      render(<CalendarView invoices={mockInvoices} config={mockConfig} onInvoiceClick={onInvoiceClickMock} />)
+
+      // Find an invoice pill button
+      const pill = screen.getByLabelText(/Invoice for Acme Corp/)
+
+      // Press Space key
+      fireEvent.keyDown(pill, { key: ' ', code: 'Space' })
+
+      // Should have called the handler with the invoice
+      expect(onInvoiceClickMock).toHaveBeenCalledTimes(1)
+      expect(onInvoiceClickMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invoiceId: 'INV-20260415',
+          clientId: 'Acme Corp'
+        })
+      )
+    })
+
+    it('does not activate invoice pill when other keys are pressed', () => {
+      const onInvoiceClickMock = vi.fn()
+      render(<CalendarView invoices={mockInvoices} config={mockConfig} onInvoiceClick={onInvoiceClickMock} />)
+
+      // Find an invoice pill button
+      const pill = screen.getByLabelText(/Invoice for Sunrise Home Health/)
+
+      // Press various non-activation keys
+      fireEvent.keyDown(pill, { key: 'a', code: 'KeyA' })
+      fireEvent.keyDown(pill, { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(pill, { key: 'Escape', code: 'Escape' })
+
+      // Should not have called the handler
+      expect(onInvoiceClickMock).not.toHaveBeenCalled()
+    })
+
+    it('includes accessible ARIA labels for invoice pills', () => {
+      render(<CalendarView invoices={mockInvoices} config={mockConfig} onInvoiceClick={vi.fn()} />)
+
+      // Check for ARIA labels with complete invoice information
+      expect(screen.getByLabelText('Invoice for Sunrise Home Health, 40 hours, $1120, sent')).toBeInTheDocument()
+      expect(screen.getByLabelText('Invoice for Acme Corp, 35 hours, $980, paid')).toBeInTheDocument()
+      expect(screen.getByLabelText('Invoice for Test Client, 38 hours, $1064, draft')).toBeInTheDocument()
+    })
+
+    it('includes overdue status in ARIA label for overdue invoices', () => {
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+
+      // Create an overdue invoice in the current month
+      const overdueInvoice = {
+        invoiceId: 'INV-OVERDUE',
+        invoiceNumber: 'INV-999',
+        clientId: 'Overdue Inc',
+        weekStart: `${year}-${month}-05`,
+        weekEnd: `${year}-${month}-11`,
+        totalHours: 42,
+        totalPay: 1176.0,
+        status: 'sent',
+        dueDate: '2025-01-01' // Past due date
+      }
+
+      render(<CalendarView invoices={[overdueInvoice]} config={mockConfig} onInvoiceClick={vi.fn()} />)
+
+      // The overdue invoice should have "overdue" in its ARIA label
+      expect(screen.getByLabelText('Invoice for Overdue Inc, 42 hours, $1176, overdue')).toBeInTheDocument()
+    })
+
+    it('prevents default behavior on Space key to avoid page scroll', () => {
+      const onInvoiceClickMock = vi.fn()
+      render(<CalendarView invoices={mockInvoices} config={mockConfig} onInvoiceClick={onInvoiceClickMock} />)
+
+      const pill = screen.getByLabelText(/Invoice for Sunrise Home Health/)
+
+      // Fire Space key event and check if preventDefault was called
+      const event = fireEvent.keyDown(pill, { key: ' ', code: 'Space' })
+
+      // The event should have had preventDefault called on it
+      // This is indicated by defaultPrevented being true
+      expect(event).toBe(false) // fireEvent returns false when preventDefault is called
+    })
+  })
 })
