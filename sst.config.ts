@@ -197,6 +197,23 @@ export default $config({
       auth: { jwt: { authorizer: "cognito" } },
     });
 
+    // Phase 4: Resend invoices to clients
+    api.route("POST /api/invoices/resend", {
+      handler: "backend/functions/resend.handler",
+      link: [usersTable, invoicesTable, bucket],
+      timeout: "60 seconds",
+      memory: "512 MB",
+      auth: { jwt: { authorizer: "cognito" } },
+      permissions: [
+        {
+          actions: ["ses:SendEmail", "ses:SendRawEmail"],
+          resources: [
+            $interpolate`arn:aws:ses:${aws.getRegionOutput().name}:${aws.getCallerIdentityOutput().accountId}:identity/${emailIdentity.email}`,
+          ],
+        },
+      ],
+    });
+
     // Phase 4: Logo upload, retrieval, and deletion
     api.route("GET /api/logo", {
       handler: "backend/functions/logo.handler",

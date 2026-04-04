@@ -1,4 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
+import { getAuthToken } from "../auth.jsx";
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // Chrome styling (matches HistoryPage.jsx and CalendarView.jsx)
 const chrome = {
@@ -78,6 +81,14 @@ export default function ListView({ invoices, config, onInvoiceClick }) {
 
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState(new Set());
+
+  // Bulk action progress state
+  const [bulkActionInProgress, setBulkActionInProgress] = useState(null); // 'markPaid' | 'export' | 'resend' | null
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, status: '' });
+
+  // Export format selector modal state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState('zip');
 
   // Get unique clients for filter dropdown
   const uniqueClients = useMemo(() => getUniqueClients(invoices), [invoices]);
@@ -192,20 +203,197 @@ export default function ListView({ invoices, config, onInvoiceClick }) {
     }
   };
 
-  // Bulk action handlers (UI-only per scope boundary)
-  const handleBulkMarkPaid = () => {
-    // TODO: Backend integration in separate issue
-    alert(`Mark ${selectedIds.size} invoice(s) as paid - Backend integration pending`);
+  /**
+   * Bulk action: Mark selected invoices as paid
+   * Calls PATCH /api/invoices/{id}/status for each selected invoice in parallel
+   */
+  const handleBulkMarkPaid = async () => {
+    const invoiceIds = Array.from(selectedIds);
+    const total = invoiceIds.length;
+
+    try {
+      setBulkActionInProgress('markPaid');
+      setBulkProgress({ current: 0, total, status: 'Marking invoices as paid...' });
+
+      const token = await getAuthToken();
+      if (!token) {
+        alert('Authentication required. Please sign in.');
+        return;
+      }
+
+      // Process all invoices in parallel for speed
+      const results = await Promise.allSettled(
+        invoiceIds.map(async (invoiceId, index) => {
+          const response = await fetch(`${API_BASE}/api/invoices/${invoiceId}/status`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: 'paid' })
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to mark ${invoiceId} as paid`);
+          }
+
+          // Update progress
+          setBulkProgress(prev => ({ ...prev, current: index + 1 }));
+          return invoiceId;
+        })
+      );
+
+      // Count successes and failures
+      const successful = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+
+      // Show feedback
+      if (failed === 0) {
+        alert(`✓ Successfully marked ${successful} invoice(s) as paid`);
+      } else {
+        alert(`Marked ${successful} invoice(s) as paid. ${failed} failed.`);
+      }
+
+      // Clear selections on success
+      setSelectedIds(new Set());
+
+    } catch (error) {
+      console.error('Bulk mark paid error:', error);
+      alert(`Error marking invoices as paid: ${error.message}`);
+    } finally {
+      setBulkActionInProgress(null);
+      setBulkProgress({ current: 0, total: 0, status: '' });
+    }
   };
 
+  /**
+   * Bulk action: Export selected invoices
+   * Shows format selector modal, then calls POST /api/export
+   */
   const handleBulkExport = () => {
-    // TODO: Backend integration in separate issue
-    alert(`Export ${selectedIds.size} invoice(s) - Backend integration pending`);
+    // Show format selector modal
+    setShowExportModal(true);
   };
 
-  const handleBulkResend = () => {
-    // TODO: Backend integration in separate issue
-    alert(`Resend ${selectedIds.size} invoice(s) - Backend integration pending`);
+  /**
+   * Execute export after format selection
+   */
+  const executeExport = async (format) => {
+    const invoiceIds = Array.from(selectedIds);
+
+    try {
+      setShowExportModal(false);
+      setBulkActionInProgress('export');
+      setBulkProgress({ current: 0, total: 1, status: `Generating ${format.toUpperCase()} export...` });
+
+      const token = await getAuthToken();
+      if (!token) {
+        alert('Authentication required. Please sign in.');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/api/export`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          invoiceIds,
+          format
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Export failed');
+      }
+
+      const data = await response.json();
+
+      // Trigger download from signed URL
+      if (data.downloadUrl) {
+        // Create temporary link and click it to trigger download
+        const link = document.createElement('a');
+        link.href = data.downloadUrl;
+        link.download = `invoices-export.${format}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        alert(`✓ Export ready! Download should start automatically. (${data.invoiceCount} invoices)`);
+      }
+
+      // Clear selections on success
+      setSelectedIds(new Set());
+
+    } catch (error) {
+      console.error('Export error:', error);
+      alert(`Export failed: ${error.message}`);
+    } finally {
+      setBulkActionInProgress(null);
+      setBulkProgress({ current: 0, total: 0, status: '' });
+    }
+  };
+
+  /**
+   * Bulk action: Resend selected invoices
+   * Calls POST /api/invoices/resend with selected invoice IDs
+   */
+  const handleBulkResend = async () => {
+    const invoiceIds = Array.from(selectedIds);
+    const total = invoiceIds.length;
+
+    if (!confirm(`Resend ${total} invoice(s) to their respective clients?`)) {
+      return;
+    }
+
+    try {
+      setBulkActionInProgress('resend');
+      setBulkProgress({ current: 0, total, status: 'Resending invoices...' });
+
+      const token = await getAuthToken();
+      if (!token) {
+        alert('Authentication required. Please sign in.');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/api/invoices/resend`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ invoiceIds })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Resend failed');
+      }
+
+      const data = await response.json();
+
+      // Show feedback with success/failure counts
+      const successful = data.successful || 0;
+      const failed = data.failed || 0;
+
+      if (failed === 0) {
+        alert(`✓ Successfully resent ${successful} invoice(s)`);
+      } else {
+        alert(`Resent ${successful} invoice(s). ${failed} failed.`);
+      }
+
+      // Clear selections on success
+      setSelectedIds(new Set());
+
+    } catch (error) {
+      console.error('Resend error:', error);
+      alert(`Error resending invoices: ${error.message}`);
+    } finally {
+      setBulkActionInProgress(null);
+      setBulkProgress({ current: 0, total: 0, status: '' });
+    }
   };
 
   // Toggle sort order for a given field
@@ -775,6 +963,236 @@ export default function ListView({ invoices, config, onInvoiceClick }) {
           </div>
         </div>
       )}
+
+      {/* Export Format Selector Modal */}
+      {showExportModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 200
+          }}
+          onClick={() => setShowExportModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 12,
+              padding: "24px",
+              maxWidth: 400,
+              width: "90%",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.2)"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: "#6a4a40",
+              marginBottom: 16
+            }}>
+              Select Export Format
+            </h3>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "12px",
+                border: `2px solid ${exportFormat === 'zip' ? acc : chrome.border}`,
+                borderRadius: 8,
+                marginBottom: 12,
+                cursor: "pointer",
+                background: exportFormat === 'zip' ? tint(acc, 0.05) : 'white'
+              }}>
+                <input
+                  type="radio"
+                  name="exportFormat"
+                  value="zip"
+                  checked={exportFormat === 'zip'}
+                  onChange={(e) => setExportFormat(e.target.value)}
+                  style={{
+                    marginRight: 12,
+                    accentColor: acc,
+                    width: 18,
+                    height: 18,
+                    cursor: "pointer"
+                  }}
+                />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#6a4a40" }}>
+                    ZIP Archive
+                  </div>
+                  <div style={{ fontSize: 12, color: chrome.mutedText }}>
+                    Download all invoice PDFs in a compressed file
+                  </div>
+                </div>
+              </label>
+
+              <label style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "12px",
+                border: `2px solid ${exportFormat === 'csv' ? acc : chrome.border}`,
+                borderRadius: 8,
+                cursor: "pointer",
+                background: exportFormat === 'csv' ? tint(acc, 0.05) : 'white'
+              }}>
+                <input
+                  type="radio"
+                  name="exportFormat"
+                  value="csv"
+                  checked={exportFormat === 'csv'}
+                  onChange={(e) => setExportFormat(e.target.value)}
+                  style={{
+                    marginRight: 12,
+                    accentColor: acc,
+                    width: 18,
+                    height: 18,
+                    cursor: "pointer"
+                  }}
+                />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#6a4a40" }}>
+                    CSV Spreadsheet
+                  </div>
+                  <div style={{ fontSize: 12, color: chrome.mutedText }}>
+                    Export invoice data as a table for accounting software
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div style={{
+              display: "flex",
+              gap: 12,
+              justifyContent: "flex-end"
+            }}>
+              <button
+                onClick={() => setShowExportModal(false)}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  padding: "10px 18px",
+                  borderRadius: 6,
+                  border: `1.5px solid ${chrome.border}`,
+                  background: "white",
+                  color: "#6a4a40",
+                  cursor: "pointer"
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => executeExport(exportFormat)}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  padding: "10px 18px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: acc,
+                  color: "white",
+                  cursor: "pointer"
+                }}
+              >
+                Export {selectedIds.size} Invoice{selectedIds.size !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Action Progress Overlay */}
+      {bulkActionInProgress && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 300
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 12,
+              padding: "32px",
+              maxWidth: 400,
+              width: "90%",
+              textAlign: "center",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+            }}
+          >
+            <div style={{
+              fontSize: 24,
+              marginBottom: 16
+            }}>
+              ⏳
+            </div>
+
+            <div style={{
+              fontSize: 16,
+              fontWeight: 700,
+              color: "#6a4a40",
+              marginBottom: 8
+            }}>
+              {bulkProgress.status}
+            </div>
+
+            {bulkProgress.total > 1 && (
+              <div style={{
+                fontSize: 14,
+                color: chrome.mutedText,
+                marginBottom: 16
+              }}>
+                {bulkProgress.current} of {bulkProgress.total}
+              </div>
+            )}
+
+            {/* Simple progress bar */}
+            {bulkProgress.total > 0 && (
+              <div style={{
+                width: "100%",
+                height: 6,
+                background: "#e8d8cc",
+                borderRadius: 3,
+                overflow: "hidden"
+              }}>
+                <div style={{
+                  width: `${(bulkProgress.current / bulkProgress.total) * 100}%`,
+                  height: "100%",
+                  background: acc,
+                  transition: "width 0.3s ease"
+                }} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/**
+ * Helper function to create tinted colors with alpha
+ */
+function tint(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
