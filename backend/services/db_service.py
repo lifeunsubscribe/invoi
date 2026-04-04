@@ -144,6 +144,12 @@ def query_invoices(user_id, filters=None):
             'invoiceId_start': 'INV-20260301',
             'invoiceId_end': 'INV-20260331'
         })
+
+    Note:
+        Filter parameter validation verified 2026-04-03: All three filters required by
+        submit_monthly.py are fully supported (invoiceId_start, invoiceId_end, type).
+        Implementation handles date ranges via Key conditions (lines 161-170) and type
+        filter via Attr condition (line 183-184).
     """
     try:
         table = get_invoices_table()

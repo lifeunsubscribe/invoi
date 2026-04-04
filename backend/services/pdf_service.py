@@ -554,6 +554,11 @@ def generate_monthly_report(config, week_data, month_label,
 
     Returns:
         bytes — PDF content
+
+    Note:
+        Function signature verified 2026-04-03: All parameters match submit_monthly.py caller.
+        Required params (config, week_data, month_label) + optional params
+        (template_id, signature_font, sign_date, invoice_date) align with Lambda handler usage.
     """
     return render_monthly_pdf(
         config, week_data, month_label,
