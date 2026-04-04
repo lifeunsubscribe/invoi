@@ -5,7 +5,7 @@
  * Explains value proposition for hourly 1099 contractors.
  */
 
-export default function LandingPage({ onSignIn }) {
+export default function LandingPage({ onSignIn, onNavigate }) {
   const primaryColor = "#b76e79";
   const lightBg = "#fdf8f4";
   const darkText = "#2c1810";
@@ -335,6 +335,50 @@ export default function LandingPage({ onSignIn }) {
             marginBottom: 12
           }}>Invoi</div>
           <div>Invoicing for hourly contractors</div>
+          <div style={{
+            marginTop: 16,
+            display: "flex",
+            gap: 20,
+            justifyContent: "center",
+            alignItems: "center",
+            flexWrap: "wrap"
+          }}>
+            <button
+              onClick={() => onNavigate && onNavigate("privacy")}
+              style={{
+                background: "none",
+                border: "none",
+                color: primaryColor,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+                textDecoration: "none",
+                padding: 0
+              }}
+              onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
+              onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}
+            >
+              Privacy Policy
+            </button>
+            <span style={{ color: "#d0c0b0" }}>•</span>
+            <button
+              onClick={() => onNavigate && onNavigate("terms")}
+              style={{
+                background: "none",
+                border: "none",
+                color: primaryColor,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+                textDecoration: "none",
+                padding: 0
+              }}
+              onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
+              onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}
+            >
+              Terms of Service
+            </button>
+          </div>
           <div style={{ marginTop: 12 }}>© 2026 Invoi. Built for people who work by the hour.</div>
         </div>
       </footer>
