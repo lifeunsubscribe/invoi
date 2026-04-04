@@ -102,6 +102,18 @@ export default function InvoiceDetailPanel({
     return () => clearTimeout(timer);
   }, []);
 
+  // Keyboard accessibility: Close panel on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        handleClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // Handle close with slide-out animation
   // Reverses the slide-in animation before unmounting
   const handleClose = () => {
@@ -145,6 +157,19 @@ export default function InvoiceDetailPanel({
     if (onMarkPaid) {
       onMarkPaid(invoice, !isPaid);
     }
+  };
+
+  // Download PDF handler
+  // Opens the PDF in a new tab using the S3 URL from the pdfKey
+  const handleDownloadPdf = (pdfKey) => {
+    if (!pdfKey) return;
+
+    // Construct the S3 URL for the PDF
+    // The pdfKey is the S3 object key, we need to construct the full URL
+    const s3Url = `https://${import.meta.env.VITE_S3_BUCKET}.s3.${import.meta.env.VITE_AWS_REGION}.amazonaws.com/${pdfKey}`;
+
+    // Open in a new tab for preview/download
+    window.open(s3Url, '_blank');
   };
 
   const status = getInvoiceStatus(invoice);
@@ -488,6 +513,7 @@ export default function InvoiceDetailPanel({
                 </div>
               </div>
               <button
+                onClick={() => handleDownloadPdf(invoice.pdfKey)}
                 style={{
                   fontSize: 12,
                   fontWeight: 600,
@@ -538,6 +564,7 @@ export default function InvoiceDetailPanel({
                   </div>
                 </div>
                 <button
+                  onClick={() => handleDownloadPdf(invoice.logPdfKey)}
                   style={{
                     fontSize: 12,
                     fontWeight: 600,
