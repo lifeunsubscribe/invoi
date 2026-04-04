@@ -169,7 +169,17 @@ def handler(event, context):
         if not hours or not any(hours.values()):
             default_shift = active_client.get('defaultShift')
             if default_shift:
-                hours = _populate_hours_from_default_shift(default_shift)
+                try:
+                    hours = _populate_hours_from_default_shift(default_shift)
+                except ValueError as e:
+                    # Invalid default shift configuration - return 400 with helpful error
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({
+                            'error': f'Invalid default shift configuration: {str(e)}'
+                        })
+                    }
             else:
                 # No hours provided and no default shift configured
                 return {
