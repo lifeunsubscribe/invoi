@@ -226,6 +226,8 @@ def update_invoice_status(user_id, invoice_id, status, paid_at=None):
         ValueError: If status is invalid or invoice not found
         ClientError: If DynamoDB operation fails
     """
+    from datetime import datetime, timezone
+
     # Validate status value
     valid_statuses = ['draft', 'sent', 'paid', 'overdue']
     if status not in valid_statuses:
@@ -234,26 +236,33 @@ def update_invoice_status(user_id, invoice_id, status, paid_at=None):
     try:
         table = get_invoices_table()
 
+        # Always update the updatedAt timestamp
+        updated_at = datetime.now(timezone.utc).isoformat()
+
         # Build update expression based on status
         if status == 'paid' and paid_at:
             # When marking as paid, also record the payment timestamp
-            update_expression = 'SET #status = :status, #paidAt = :paidAt'
+            update_expression = 'SET #status = :status, #paidAt = :paidAt, #updatedAt = :updatedAt'
             expression_attribute_values = {
                 ':status': status,
-                ':paidAt': paid_at
+                ':paidAt': paid_at,
+                ':updatedAt': updated_at
             }
             expression_attribute_names = {
                 '#status': 'status',
-                '#paidAt': 'paidAt'
+                '#paidAt': 'paidAt',
+                '#updatedAt': 'updatedAt'
             }
         else:
-            # For other status changes, only update the status field
-            update_expression = 'SET #status = :status'
+            # For other status changes, update status and updatedAt
+            update_expression = 'SET #status = :status, #updatedAt = :updatedAt'
             expression_attribute_values = {
-                ':status': status
+                ':status': status,
+                ':updatedAt': updated_at
             }
             expression_attribute_names = {
-                '#status': 'status'
+                '#status': 'status',
+                '#updatedAt': 'updatedAt'
             }
 
         # Update the invoice with condition that it exists
