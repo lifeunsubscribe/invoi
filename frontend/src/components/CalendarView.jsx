@@ -67,6 +67,7 @@ function getInvoiceStatus(invoice) {
  * - Month navigation (‹ ›) loads adjacent months
  * - Tap pill opens invoice detail panel
  * - Today highlighted in grid
+ * - Keyboard accessible: Tab to navigate, Enter/Space to activate pills
  */
 export default function CalendarView({ invoices, config, onInvoiceClick }) {
   const today = new Date();
@@ -155,6 +156,14 @@ export default function CalendarView({ invoices, config, onInvoiceClick }) {
       maxWidth: 900,
       margin: "0 auto"
     }}>
+      {/* Focus styles for keyboard navigation */}
+      <style>{`
+        .invoice-pill:focus-visible {
+          outline: 3px solid ${acc};
+          outline-offset: 2px;
+          box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
+        }
+      `}</style>
       {/* Month Navigation Header */}
       <div style={{
         display: "flex",
@@ -313,10 +322,21 @@ export default function CalendarView({ invoices, config, onInvoiceClick }) {
                     const statusColor = STATUS_COLORS[status];
                     const initials = getClientInitials(invoice.clientId || "Client");
 
+                    // Create accessible label for screen readers
+                    const ariaLabel = `Invoice for ${invoice.clientId || "Client"}, ${invoice.totalHours || 0} hours, $${(invoice.totalPay || 0).toFixed(0)}, ${status}`;
+
                     return (
                       <button
                         key={invoice.invoiceId}
                         onClick={() => onInvoiceClick && onInvoiceClick(invoice)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onInvoiceClick && onInvoiceClick(invoice);
+                          }
+                        }}
+                        aria-label={ariaLabel}
+                        className="invoice-pill"
                         style={{
                           fontSize: 10,
                           fontWeight: 600,
