@@ -1,4 +1,16 @@
 import { useState, useEffect } from "react";
+import { getAuthToken } from "../auth.jsx";
+
+// API configuration
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
+// Validate required environment variables for API calls
+if (!API_BASE && import.meta.env.DEV) {
+  console.warn(
+    'VITE_API_URL is not defined. PDF download will fail.\n' +
+    'Run `npx sst dev` to start the development environment with the API.'
+  );
+}
 
 // Chrome styling (matches HistoryPage.jsx)
 const chrome = {
@@ -160,16 +172,65 @@ export default function InvoiceDetailPanel({
   };
 
   // Download PDF handler
-  // Opens the PDF in a new tab using the S3 URL from the pdfKey
-  const handleDownloadPdf = (pdfKey) => {
-    if (!pdfKey) return;
+  // Fetches a signed URL from the backend and opens it in a new tab
+  // Supports both invoice PDFs (pdfType='invoice') and service log PDFs (pdfType='log')
+  const handleDownloadPdf = async (pdfType = 'invoice') => {
+    // Validate API configuration before making the request
+    if (!API_BASE) {
+      console.error('Cannot download PDF: VITE_API_URL is not configured');
+      alert('PDF download is not available. Please ensure the API is configured.');
+      return;
+    }
 
-    // Construct the S3 URL for the PDF
-    // The pdfKey is the S3 object key, we need to construct the full URL
-    const s3Url = `https://${import.meta.env.VITE_S3_BUCKET}.s3.${import.meta.env.VITE_AWS_REGION}.amazonaws.com/${pdfKey}`;
+    // Check if the requested PDF type exists for this invoice
+    if (pdfType === 'log' && !invoice.logPdfKey) {
+      console.error('Cannot download service log PDF: No service log PDF available for this invoice');
+      alert('No service log PDF available for this invoice');
+      return;
+    }
 
-    // Open in a new tab for preview/download
-    window.open(s3Url, '_blank');
+    if (pdfType === 'invoice' && !invoice.pdfKey) {
+      console.error('Cannot download invoice PDF: No invoice PDF available');
+      alert('No invoice PDF available for this invoice');
+      return;
+    }
+
+    try {
+      // Get authentication token
+      const token = await getAuthToken();
+      if (!token) {
+        console.error('Cannot download PDF: Not authenticated');
+        alert('Please sign in to download PDFs');
+        return;
+      }
+
+      // Request signed URL from backend API with PDF type parameter
+      // The backend validates ownership and generates a time-limited signed S3 URL
+      const url = `${API_BASE}/api/pdf/${invoice.invoiceId}${pdfType === 'log' ? '?type=log' : ''}`;
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to get PDF URL (${response.status})`);
+      }
+
+      const data = await response.json();
+
+      // Open the signed URL in a new tab for preview/download
+      if (data.pdfUrl) {
+        window.open(data.pdfUrl, '_blank');
+      } else {
+        throw new Error('No PDF URL returned from server');
+      }
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      alert(`Failed to download PDF: ${error.message}`);
+    }
   };
 
   const status = getInvoiceStatus(invoice);
@@ -513,7 +574,7 @@ export default function InvoiceDetailPanel({
                 </div>
               </div>
               <button
-                onClick={() => handleDownloadPdf(invoice.pdfKey)}
+                onClick={() => handleDownloadPdf('invoice')}
                 style={{
                   fontSize: 12,
                   fontWeight: 600,
@@ -564,7 +625,7 @@ export default function InvoiceDetailPanel({
                   </div>
                 </div>
                 <button
-                  onClick={() => handleDownloadPdf(invoice.logPdfKey)}
+                  onClick={() => handleDownloadPdf('log')}
                   style={{
                     fontSize: 12,
                     fontWeight: 600,
