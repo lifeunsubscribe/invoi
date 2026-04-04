@@ -8,7 +8,7 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from functions.submit_weekly import handler, _calculate_due_date
+from functions.submit_weekly import handler, _calculate_due_date, _populate_hours_from_default_shift
 from botocore.exceptions import ClientError
 
 
@@ -690,3 +690,188 @@ class TestSubmitWeekly:
         assert 'SES error' in body['emailWarning']
         assert body['sent'] == []
         assert body['status'] == 'draft'  # Status should remain draft since email failed
+
+    def test_populate_hours_from_default_shift(self):
+        """Default shift should populate hours correctly"""
+        default_shift = {
+            'start': '09:00',
+            'end': '17:00',
+            'days': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+        }
+
+        hours = _populate_hours_from_default_shift(default_shift)
+
+        # Should populate Mon-Fri with 8 hours each (9am to 5pm = 8 hours)
+        assert hours['Monday'] == 8.0
+        assert hours['Tuesday'] == 8.0
+        assert hours['Wednesday'] == 8.0
+        assert hours['Thursday'] == 8.0
+        assert hours['Friday'] == 8.0
+        assert hours['Saturday'] == 0
+        assert hours['Sunday'] == 0
+
+    def test_populate_hours_from_default_shift_custom_hours(self):
+        """Default shift with custom hours (6am to 2pm = 8 hours)"""
+        default_shift = {
+            'start': '06:00',
+            'end': '14:00',
+            'days': ['Mon', 'Tue', 'Wed', 'Thu']
+        }
+
+        hours = _populate_hours_from_default_shift(default_shift)
+
+        assert hours['Monday'] == 8.0
+        assert hours['Tuesday'] == 8.0
+        assert hours['Wednesday'] == 8.0
+        assert hours['Thursday'] == 8.0
+        assert hours['Friday'] == 0
+        assert hours['Saturday'] == 0
+        assert hours['Sunday'] == 0
+
+    def test_populate_hours_from_default_shift_fractional_hours(self):
+        """Default shift with half hours (9am to 1:30pm = 4.5 hours)"""
+        default_shift = {
+            'start': '09:00',
+            'end': '13:30',
+            'days': ['Mon', 'Wed', 'Fri']
+        }
+
+        hours = _populate_hours_from_default_shift(default_shift)
+
+        assert hours['Monday'] == 4.5
+        assert hours['Tuesday'] == 0
+        assert hours['Wednesday'] == 4.5
+        assert hours['Thursday'] == 0
+        assert hours['Friday'] == 4.5
+        assert hours['Saturday'] == 0
+        assert hours['Sunday'] == 0
+
+    def test_submit_weekly_with_default_shift_prefill(self):
+        """POST with no hours but default shift configured should succeed"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'hours': {},  # Empty hours - should use default shift
+                'week': {
+                    'start': '2026-03-24',
+                    'end': '2026-03-30',
+                    'invNum': 'INV-20260324'
+                },
+                'saveOnly': True
+            })
+        }
+
+        # Mock user config with client that has default shift
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'address': '123 Main St',
+            'personalEmail': 'test@example.com',
+            'rate': 28.00,
+            'template': 'morning-light',
+            'signatureFont': 'Dancing Script',
+            'paymentTerms': 'receipt',
+            'taxEnabled': False,
+            'invoiceNumberConfig': {
+                'prefix': 'INV',
+                'includeYear': False,
+                'separator': '-',
+                'padding': 3,
+                'nextNum': 1
+            },
+            'activeClientId': 'client-1',
+            'clients': [
+                {
+                    'id': 'client-1',
+                    'name': 'Test Client',
+                    'email': 'client@example.com',
+                    'defaultShift': {
+                        'start': '09:00',
+                        'end': '17:00',
+                        'days': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+                    }
+                }
+            ]
+        }
+
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_weekly.get_user', return_value=mock_user):
+                with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
+                    with patch('functions.submit_weekly.save_pdf_to_s3'):
+                        with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                            with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                mock_dynamodb_client = MagicMock()
+                                mock_boto_client.return_value = mock_dynamodb_client
+                                mock_table = MagicMock()
+                                mock_boto_resource.return_value.Table.return_value = mock_table
+
+                                response = handler(event, {})
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        # Default shift is Mon-Fri, 9am-5pm (8 hours each) = 40 hours total
+        assert body['totalHours'] == 40.0
+        # 40 hours × $28/hr = $1120
+        assert body['totalPay'] == 1120.0
+
+    def test_submit_weekly_no_hours_no_default_shift(self):
+        """POST with no hours and no default shift should return 400"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'hours': {},  # Empty hours
+                'week': {
+                    'start': '2026-03-24',
+                    'end': '2026-03-30',
+                    'invNum': 'INV-20260324'
+                }
+            })
+        }
+
+        # Mock user config with client that has NO default shift
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'address': '123 Main St',
+            'personalEmail': 'test@example.com',
+            'rate': 28.00,
+            'activeClientId': 'client-1',
+            'clients': [
+                {
+                    'id': 'client-1',
+                    'name': 'Test Client',
+                    'email': 'client@example.com'
+                    # No defaultShift configured
+                }
+            ]
+        }
+
+        with patch('functions.submit_weekly.get_user', return_value=mock_user):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 400
+        body = json.loads(response['body'])
+        assert 'error' in body
+        assert 'hours' in body['error'].lower() or 'default shift' in body['error'].lower()

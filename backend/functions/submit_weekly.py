@@ -13,7 +13,7 @@ from services.mail_service import send_weekly_email
 from botocore.exceptions import ClientError
 
 # Re-export for test imports
-__all__ = ['handler', '_calculate_due_date']
+__all__ = ['handler', '_calculate_due_date', '_populate_hours_from_default_shift']
 
 
 def handler(event, context):
@@ -86,11 +86,11 @@ def handler(event, context):
         save_only = body.get('saveOnly', True)  # Default to save-only (draft mode) for Phase 2
 
         # Validate required parameters
-        if not hours or not week:
+        if not week:
             return {
                 'statusCode': 400,
                 'headers': headers,
-                'body': json.dumps({'error': 'Both hours and week are required in request body'})
+                'body': json.dumps({'error': 'week is required in request body'})
             }
 
         # Validate hours structure (must be a dict with valid day names)
@@ -164,6 +164,32 @@ def handler(event, context):
                 'headers': headers,
                 'body': json.dumps({'error': 'No active client configured. Please select a client in your profile.'})
             }
+
+        # Default shift prefill: If no hours provided, populate from client's default shift
+        # This enables users with consistent schedules to generate invoices without manual hour entry
+        if not hours or not any(hours.values()):
+            default_shift = active_client.get('defaultShift')
+            if default_shift:
+                try:
+                    hours = _populate_hours_from_default_shift(default_shift)
+                except ValueError as e:
+                    # Invalid default shift configuration - return 400 with helpful error
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({
+                            'error': f'Invalid default shift configuration: {str(e)}'
+                        })
+                    }
+            else:
+                # No hours provided and no default shift configured
+                return {
+                    'statusCode': 400,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'error': 'No hours provided. Either provide hours in the request or configure a default shift for this client in your profile.'
+                    })
+                }
 
         # Generate preview invoice number for PDF generation (before atomic increment)
         # Note: This is a preview only - the actual number will be confirmed after transaction succeeds
@@ -467,6 +493,79 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
         raise
 
     return invoice_number, invoice_metadata
+
+
+def _populate_hours_from_default_shift(default_shift):
+    """
+    Populate daily hours from client's default shift configuration.
+
+    Args:
+        default_shift: dict with keys:
+            - start: str (e.g., "09:00")
+            - end: str (e.g., "17:00")
+            - days: list of str (e.g., ["Mon", "Tue", "Wed", "Thu", "Fri"])
+
+    Returns:
+        dict: Daily hours mapping full day names to calculated hours
+              (e.g., {"Monday": 8.0, "Tuesday": 8.0, ...})
+
+    Example:
+        default_shift = {"start": "09:00", "end": "17:00", "days": ["Mon", "Tue", "Wed", "Thu", "Fri"]}
+        → {"Monday": 8.0, "Tuesday": 8.0, "Wednesday": 8.0, "Thursday": 8.0, "Friday": 8.0,
+           "Saturday": 0, "Sunday": 0}
+    """
+    # Parse shift start and end times to calculate hours per day
+    start_time = default_shift.get('start', '09:00')
+    end_time = default_shift.get('end', '17:00')
+    shift_days = default_shift.get('days', [])
+
+    # Calculate hours from start/end times (e.g., "09:00" to "17:00" = 8 hours)
+    try:
+        start_hour, start_min = map(int, start_time.split(':'))
+        end_hour, end_min = map(int, end_time.split(':'))
+        hours_per_shift = (end_hour * 60 + end_min - start_hour * 60 - start_min) / 60.0
+    except (ValueError, AttributeError) as e:
+        # Invalid time format in default shift configuration
+        error_msg = f"Invalid time format in default shift: start='{start_time}', end='{end_time}'. Expected format: HH:MM"
+        print(f"ERROR: {error_msg} - {str(e)}")
+        raise ValueError(error_msg)
+
+    # Validate that calculated hours are positive and reasonable
+    if hours_per_shift <= 0:
+        raise ValueError(f"Invalid default shift: end time must be after start time (start='{start_time}', end='{end_time}', calculated hours={hours_per_shift})")
+    if hours_per_shift > 24:
+        raise ValueError(f"Invalid default shift: shift duration cannot exceed 24 hours (start='{start_time}', end='{end_time}', calculated hours={hours_per_shift})")
+
+    # Map abbreviated day names to full names
+    day_mapping = {
+        'Mon': 'Monday',
+        'Tue': 'Tuesday',
+        'Wed': 'Wednesday',
+        'Thu': 'Thursday',
+        'Fri': 'Friday',
+        'Sat': 'Saturday',
+        'Sun': 'Sunday'
+    }
+
+    # Initialize all days to 0, then populate configured shift days
+    hours = {
+        'Monday': 0,
+        'Tuesday': 0,
+        'Wednesday': 0,
+        'Thursday': 0,
+        'Friday': 0,
+        'Saturday': 0,
+        'Sunday': 0
+    }
+
+    for abbrev_day in shift_days:
+        full_day = day_mapping.get(abbrev_day)
+        if full_day:
+            hours[full_day] = hours_per_shift
+        else:
+            print(f"WARNING: Unrecognized day abbreviation '{abbrev_day}' in default shift configuration. Expected one of: {', '.join(day_mapping.keys())}")
+
+    return hours
 
 
 def _extract_user_id_from_token(event):
