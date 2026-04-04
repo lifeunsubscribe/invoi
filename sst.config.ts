@@ -159,6 +159,18 @@ export default $config({
       link: [invoicesTable],
     });
 
+    // Phase 4: List invoices with filtering and pagination
+    api.route("GET /api/invoices", {
+      handler: "backend/functions/invoices.handler",
+      link: [invoicesTable],
+    });
+
+    // Phase 4: Get single invoice by ID
+    api.route("GET /api/invoices/{id}", {
+      handler: "backend/functions/invoices.handler",
+      link: [invoicesTable],
+    });
+
     // Phase 3: Test SES email sending (temporary endpoint for validation)
     // Restricted to dev stage and requires TEST_SES_SECRET header for authentication
     if ($app.stage === "dev") {
