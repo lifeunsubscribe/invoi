@@ -180,6 +180,14 @@ def handler(event, context):
             invoice_date=datetime.now()
         )
 
+        # Validate PDF generation succeeded
+        if not pdf_bytes:
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Failed to generate PDF report'})
+            }
+
         # Upload PDF to S3 at users/{userId}/reports/RPT-{year}-{month}.pdf
         # SST Ion provides bucket name via SST_Resource_<name>_name when linked
         bucket_name = os.environ['SST_Resource_InvoiStorage_name']
@@ -190,7 +198,23 @@ def handler(event, context):
 
         # Calculate totals for metadata
         total_hours = sum(w['hours'] for w in week_data)
-        rate = float(user_config.get('rate', 0))
+
+        # Safely coerce rate to float with validation
+        try:
+            rate = float(user_config.get('rate', 0))
+            if rate < 0:
+                return {
+                    'statusCode': 500,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Invalid user configuration: rate must be non-negative'})
+                }
+        except (ValueError, TypeError):
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Invalid user configuration: rate must be a valid number'})
+            }
+
         total_pay = total_hours * rate
 
         # Save report metadata to Invoices table with type="monthly"
