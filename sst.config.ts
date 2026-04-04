@@ -13,6 +13,9 @@ export default $config({
     const googleClientId = new sst.Secret("GoogleClientId");
     const googleClientSecret = new sst.Secret("GoogleClientSecret");
 
+    // Alert email for CloudWatch alarms (set via `sst secret set AlertEmail <value>`)
+    const alertEmail = new sst.Secret("AlertEmail");
+
     // SES Email Identity for sending invoices from noreply@goinvoi.com
     // Verifies the goinvoi.com domain and configures DKIM signing
     const emailIdentity = new aws.ses.EmailIdentity("GoinvoiDomain", {
@@ -283,6 +286,247 @@ export default $config({
     //   memory: "1024 MB",
     // });
 
+    // ==========================================
+    // CloudWatch Monitoring & Alerts (Phase 6)
+    // ==========================================
+
+    // SNS Topic for CloudWatch alarm notifications
+    // Sends email alerts when Lambda errors or API Gateway 5xx responses exceed threshold
+    const alarmTopic = new aws.sns.Topic("InvoiAlarmTopic", {
+      displayName: "Invoi CloudWatch Alarms",
+    });
+
+    // Email subscription for alarm notifications
+    // Note: Email address will need to confirm subscription after deployment
+    new aws.sns.TopicSubscription("InvoiAlarmEmailSubscription", {
+      topic: alarmTopic.arn,
+      protocol: "email",
+      endpoint: alertEmail.value,
+    });
+
+    // Lambda Error Rate Alarm
+    // Triggers when Lambda error rate exceeds 1% over 5 minutes
+    // Monitors aggregate errors across all Lambda functions
+    const lambdaErrorAlarm = new aws.cloudwatch.MetricAlarm("InvoiLambdaErrorAlarm", {
+      name: "Invoi-Lambda-Errors",
+      comparisonOperator: "GreaterThanThreshold",
+      evaluationPeriods: 2, // Requires 2 consecutive 5-min periods (10 min total) to alarm
+      threshold: 1, // 1% error rate
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+      alarmDescription: "Alerts when Lambda error rate exceeds 1%",
+      treatMissingData: "notBreaching", // Don't alarm if no data (e.g., no invocations)
+
+      // Using metric math to calculate error rate percentage
+      // (Errors / Invocations) * 100
+      metrics: [
+        {
+          id: "errors",
+          metric: {
+            namespace: "AWS/Lambda",
+            metricName: "Errors",
+            stat: "Sum",
+            period: 300, // 5 minutes
+          },
+          returnData: false,
+        },
+        {
+          id: "invocations",
+          metric: {
+            namespace: "AWS/Lambda",
+            metricName: "Invocations",
+            stat: "Sum",
+            period: 300,
+          },
+          returnData: false,
+        },
+        {
+          id: "error_rate",
+          expression: "IF(invocations > 0, (errors / invocations) * 100, 0)",
+          label: "Error Rate (%)",
+          returnData: true,
+        },
+      ],
+    });
+
+    // API Gateway 5xx Error Rate Alarm
+    // Triggers when API Gateway 5xx response rate exceeds 1% over 5 minutes
+    const apiErrorAlarm = new aws.cloudwatch.MetricAlarm("InvoiApi5xxAlarm", {
+      name: "Invoi-API-5xx",
+      comparisonOperator: "GreaterThanThreshold",
+      evaluationPeriods: 2, // Requires 2 consecutive 5-min periods (10 min total) to alarm
+      threshold: 1, // 1% error rate
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+      alarmDescription: "Alerts when API Gateway 5xx error rate exceeds 1%",
+      treatMissingData: "notBreaching", // Don't alarm if no data (e.g., no API requests)
+
+      // Calculate 5xx error rate as percentage of total requests
+      metrics: [
+        {
+          id: "errors5xx",
+          metric: {
+            namespace: "AWS/ApiGateway",
+            metricName: "5XXError",
+            stat: "Sum",
+            period: 300,
+            dimensions: {
+              ApiId: api.nodes.api.id,
+            },
+          },
+          returnData: false,
+        },
+        {
+          id: "requests",
+          metric: {
+            namespace: "AWS/ApiGateway",
+            metricName: "Count",
+            stat: "Sum",
+            period: 300,
+            dimensions: {
+              ApiId: api.nodes.api.id,
+            },
+          },
+          returnData: false,
+        },
+        {
+          id: "error_rate",
+          expression: "IF(requests > 0, (errors5xx / requests) * 100, 0)",
+          label: "5xx Error Rate (%)",
+          returnData: true,
+        },
+      ],
+    });
+
+    // CloudWatch Dashboard
+    // Displays key metrics: Lambda errors/invocations, API Gateway requests/5xx errors
+    // Uses $interpolate (not $jsonStringify) to properly embed Pulumi outputs like api.nodes.api.id
+    // Dashboard body is JSON string with 4 metric widgets in 2x2 grid layout
+    const dashboard = new aws.cloudwatch.Dashboard("InvoiDashboard", {
+      dashboardName: "Invoi-Metrics",
+      dashboardBody: $interpolate`{
+        "widgets": [
+          {
+            "type": "metric",
+            "properties": {
+              "metrics": [
+                ["AWS/Lambda", "Invocations", { "stat": "Sum", "label": "Total Invocations" }],
+                [".", "Errors", { "stat": "Sum", "label": "Total Errors" }]
+              ],
+              "period": 300,
+              "stat": "Sum",
+              "region": "${aws.getRegionOutput().name}",
+              "title": "Lambda Invocations & Errors",
+              "yAxis": { "left": { "min": 0 } }
+            },
+            "width": 12,
+            "height": 6,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "type": "metric",
+            "properties": {
+              "metrics": [
+                ["AWS/Lambda", "Duration", { "stat": "Average", "label": "Avg Duration" }],
+                ["...", { "stat": "Maximum", "label": "Max Duration" }]
+              ],
+              "period": 300,
+              "stat": "Average",
+              "region": "${aws.getRegionOutput().name}",
+              "title": "Lambda Duration (ms)",
+              "yAxis": { "left": { "min": 0 } }
+            },
+            "width": 12,
+            "height": 6,
+            "x": 12,
+            "y": 0
+          },
+          {
+            "type": "metric",
+            "properties": {
+              "metrics": [
+                ["AWS/ApiGateway", "Count", { "stat": "Sum", "label": "Total Requests", "dimensions": { "ApiId": "${api.nodes.api.id}" } }],
+                [".", "5XXError", { "stat": "Sum", "label": "5xx Errors", "dimensions": { "ApiId": "${api.nodes.api.id}" } }],
+                [".", "4XXError", { "stat": "Sum", "label": "4xx Errors", "dimensions": { "ApiId": "${api.nodes.api.id}" } }]
+              ],
+              "period": 300,
+              "stat": "Sum",
+              "region": "${aws.getRegionOutput().name}",
+              "title": "API Gateway Requests & Errors",
+              "yAxis": { "left": { "min": 0 } }
+            },
+            "width": 12,
+            "height": 6,
+            "x": 0,
+            "y": 6
+          },
+          {
+            "type": "metric",
+            "properties": {
+              "metrics": [
+                ["AWS/ApiGateway", "Latency", { "stat": "Average", "label": "Avg Latency", "dimensions": { "ApiId": "${api.nodes.api.id}" } }],
+                ["...", { "stat": "p99", "label": "P99 Latency", "dimensions": { "ApiId": "${api.nodes.api.id}" } }]
+              ],
+              "period": 300,
+              "stat": "Average",
+              "region": "${aws.getRegionOutput().name}",
+              "title": "API Gateway Latency (ms)",
+              "yAxis": { "left": { "min": 0 } }
+            },
+            "width": 12,
+            "height": 6,
+            "x": 12,
+            "y": 6
+          }
+        ]
+      }`,
+    });
+
+    // Set log retention to 30 days for all Lambda function log groups
+    // SST Ion creates Lambda functions with naming pattern based on the handler path
+    // For api.route() handlers, SST uses the handler file name (without extension) as the function name
+    // Pattern: /aws/lambda/<app-name>-<stage>-<handler-basename>
+    // Example: /aws/lambda/invoi-dev-hello (from backend/functions/hello.handler)
+    const logRetentionDays = 30;
+
+    // Helper function to set log retention for a Lambda function log group
+    // Uses skipDestroy to avoid conflicts with SST-managed log groups
+    // and retentionInDays to ensure 30-day retention regardless of when the group was created
+    const setLogRetention = (handlerBaseName: string, logicalName: string) => {
+      return new aws.cloudwatch.LogGroup(`${logicalName}LogGroup`, {
+        name: $interpolate`/aws/lambda/${$app.name}-${$app.stage}-${handlerBaseName}`,
+        retentionInDays: logRetentionDays,
+        skipDestroy: true, // Don't delete log group on destroy - let SST manage lifecycle
+      });
+    };
+
+    // Set log retention for all API route handlers
+    // Handler base names are extracted from the handler paths (e.g., "backend/functions/hello.handler" -> "hello")
+    const handlerBaseNames = [
+      "hello",
+      "config",
+      "scan_month",
+      "submit_weekly",
+      "submit_monthly",
+      "test_reportlab",
+      "invoices",
+      "pdf",
+      "export",
+      "resend",
+      "import_data",
+      "logo",
+    ];
+
+    handlerBaseNames.forEach((baseName) => {
+      setLogRetention(baseName, `${baseName}Function`);
+    });
+
+    // Add test-ses function log retention for dev stage only
+    if ($app.stage === "dev") {
+      setLogRetention("test_ses", "testSesFunction");
+    }
+
     // Static site (React frontend) - defined after API/Cognito to pass correct env vars
     // These VITE_* variables are exposed to the React app at build time
     // In production, uses custom domain goinvoi.com with ACM certificate and CloudFront
@@ -321,6 +565,11 @@ export default $config({
       // After deploying to production, point your domain registrar to the Route53 nameservers
       customDomain: $app.stage === "production" ? "goinvoi.com" : "N/A (dev stage)",
       apiDomain: $app.stage === "production" ? "api.goinvoi.com" : "N/A (dev stage)",
+      // CloudWatch monitoring outputs (Phase 6)
+      alarmTopicArn: alarmTopic.arn,
+      dashboardName: dashboard.dashboardName,
+      lambdaErrorAlarmName: lambdaErrorAlarm.name,
+      apiErrorAlarmName: apiErrorAlarm.name,
     };
   },
 });
