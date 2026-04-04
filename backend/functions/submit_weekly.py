@@ -8,7 +8,7 @@ import boto3
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_user
-from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number
+from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
 from botocore.exceptions import ClientError
 
 
@@ -161,20 +161,12 @@ def handler(event, context):
                 'body': json.dumps({'error': 'No active client configured. Please select a client in your profile.'})
             }
 
-        # Atomically increment invoice number and create invoice record
-        # This uses DynamoDB TransactWriteItems to guarantee no duplicate invoice numbers
-        invoice_number, invoice_metadata = _create_invoice_with_atomic_increment(
-            user_id=user_id,
-            user_config=user_config,
-            hours=hours,
-            week=week,
-            active_client=active_client,
-            client_email=client_email,
-            accountant_email=accountant_email,
-            save_only=save_only
-        )
+        # Generate preview invoice number for PDF generation (before atomic increment)
+        # Note: This is a preview only - the actual number will be confirmed after transaction succeeds
+        preview_invoice_number = format_invoice_number(user_config, 'weekly')
 
-        # Generate invoice PDF
+        # Generate invoice PDF FIRST, before creating database records
+        # This ensures PDF generation failures don't consume invoice numbers
         template_id = user_config.get('template', 'morning-light')
         signature_font = user_config.get('signatureFont', '')
         invoice_date = datetime.now()
@@ -188,7 +180,7 @@ def handler(event, context):
                 signature_font=signature_font,
                 sign_date=invoice_date.strftime('%Y-%m-%d'),
                 invoice_date=invoice_date,
-                invoice_number=invoice_number
+                invoice_number=preview_invoice_number
             )
         except Exception as e:
             print(f"PDF generation failed: {str(e)}")
@@ -205,6 +197,20 @@ def handler(event, context):
                 'headers': headers,
                 'body': json.dumps({'error': 'PDF generation returned empty result'})
             }
+
+        # Now atomically increment invoice number and create invoice record
+        # This uses DynamoDB TransactWriteItems to guarantee no duplicate invoice numbers
+        # Since PDF is already generated, we know the operation can succeed end-to-end
+        invoice_number, invoice_metadata = _create_invoice_with_atomic_increment(
+            user_id=user_id,
+            user_config=user_config,
+            hours=hours,
+            week=week,
+            active_client=active_client,
+            client_email=client_email,
+            accountant_email=accountant_email,
+            save_only=save_only
+        )
 
         # Upload PDF to S3 at users/{userId}/weekly/{invoiceId}.pdf
         bucket_name = os.environ['SST_Resource_InvoiStorage_name']
@@ -389,39 +395,6 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
         raise
 
     return invoice_number, invoice_metadata
-
-
-def _calculate_due_date(invoice_date, payment_terms):
-    """
-    Calculate due date based on payment terms.
-
-    Args:
-        invoice_date: datetime object
-        payment_terms: str - 'receipt', 'net7', 'net15', 'net30', etc.
-
-    Returns:
-        str: Due date in YYYY-MM-DD format
-    """
-    from datetime import timedelta
-
-    terms_lower = payment_terms.lower()
-
-    if terms_lower == 'receipt':
-        days_to_add = 0
-    elif terms_lower.startswith('net'):
-        # Extract number from 'net7', 'net15', 'net30', etc.
-        days_str = terms_lower[3:]
-        try:
-            days_to_add = int(days_str)
-            if days_to_add < 0:
-                days_to_add = 0
-        except ValueError:
-            days_to_add = 0
-    else:
-        days_to_add = 0
-
-    due_date = invoice_date + timedelta(days=days_to_add)
-    return due_date.strftime('%Y-%m-%d')
 
 
 def _extract_user_id_from_token(event):

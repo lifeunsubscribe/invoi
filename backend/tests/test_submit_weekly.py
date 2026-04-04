@@ -402,3 +402,101 @@ class TestSubmitWeekly:
         body = json.loads(response['body'])
         assert 'error' in body
         assert 'JSON' in body['error']
+
+    def test_submit_weekly_transaction_cancelled(self):
+        """POST should handle TransactionCanceledException gracefully"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'hours': {
+                    'Monday': 8,
+                    'Tuesday': 8,
+                    'Wednesday': 8,
+                    'Thursday': 8,
+                    'Friday': 8,
+                    'Saturday': 0,
+                    'Sunday': 0
+                },
+                'week': {
+                    'start': '2026-03-24',
+                    'end': '2026-03-30',
+                    'invNum': 'INV-20260324'
+                },
+                'clientEmail': 'client@example.com',
+                'accountantEmail': 'accountant@example.com',
+                'saveOnly': True
+            })
+        }
+
+        # Mock user config
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'address': '123 Main St',
+            'personalEmail': 'test@example.com',
+            'rate': 28.00,
+            'template': 'morning-light',
+            'signatureFont': 'Dancing Script',
+            'paymentTerms': 'receipt',
+            'taxEnabled': False,
+            'invoiceNumberConfig': {
+                'prefix': 'INV',
+                'includeYear': False,
+                'separator': '-',
+                'padding': 3,
+                'nextNum': 1
+            },
+            'activeClientId': 'client-1',
+            'clients': [
+                {
+                    'id': 'client-1',
+                    'name': 'Test Client',
+                    'email': 'client@example.com'
+                }
+            ]
+        }
+
+        # Mock PDF generation returning bytes
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        # Mock TransactionCanceledException
+        transaction_error = ClientError(
+            {
+                'Error': {
+                    'Code': 'TransactionCanceledException',
+                    'Message': 'Transaction cancelled'
+                },
+                'CancellationReasons': [
+                    {'Code': 'ConditionalCheckFailed', 'Message': 'Invoice already exists'}
+                ]
+            },
+            'TransactWriteItems'
+        )
+
+        with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_weekly.get_user', return_value=mock_user):
+                with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
+                    with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                        # Mock DynamoDB client to raise TransactionCanceledException
+                        mock_dynamodb_client = MagicMock()
+                        mock_dynamodb_client.transact_write_items.side_effect = transaction_error
+                        mock_boto_client.return_value = mock_dynamodb_client
+
+                        response = handler(event, {})
+
+        # Should return 500 error when transaction is cancelled
+        assert response['statusCode'] == 500
+        body = json.loads(response['body'])
+        assert 'error' in body
