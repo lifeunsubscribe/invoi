@@ -101,6 +101,16 @@ def handler(event, context):
                     'headers': headers,
                     'body': json.dumps({'error': 'Month must be between 1 and 12'})
                 }
+
+            # Validate that the month has already occurred (prevent future month submissions)
+            now = datetime.now()
+            requested_date = datetime(year_int, month_int, 1)
+            if requested_date > datetime(now.year, now.month, 1):
+                return {
+                    'statusCode': 400,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Cannot submit report for a future month'})
+                }
         except ValueError:
             return {
                 'statusCode': 400,
@@ -142,6 +152,17 @@ def handler(event, context):
                 'label': week_label,
                 'hours': total_hours
             })
+
+        # Validate that there is data to report
+        if not week_data:
+            month_name = calendar.month_name[month_int]
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({
+                    'error': f'No weekly invoices found for {month_name} {year_int}. Cannot generate empty report.'
+                })
+            }
 
         # Generate month label (e.g., "March 2026")
         month_name = calendar.month_name[month_int]
