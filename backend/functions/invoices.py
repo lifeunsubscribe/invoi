@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import os
 from datetime import datetime, timezone
@@ -8,6 +9,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import update_invoice_status, get_invoice, query_invoices
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger(__name__)
 
 
 def handler(event, context):
@@ -63,7 +66,7 @@ def handler(event, context):
             }
 
     except Exception as e:
-        print(f"Unhandled error in invoices handler: {str(e)}")
+        logger.error(f"Unhandled error in invoices handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -213,14 +216,14 @@ def _handle_list_invoices(event, headers):
         }
 
     except ClientError as e:
-        print(f"DynamoDB error in GET /api/invoices: {str(e)}")
+        logger.error(f"DynamoDB error in GET /api/invoices: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to query invoices'})
         }
     except Exception as e:
-        print(f"Error in list invoices handler: {str(e)}")
+        logger.error(f"Error in list invoices handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -295,14 +298,14 @@ def _handle_get_single_invoice(event, headers):
         }
 
     except ClientError as e:
-        print(f"DynamoDB error in GET /api/invoices/{{id}}: {str(e)}")
+        logger.error(f"DynamoDB error in GET /api/invoices/{{id}}: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to retrieve invoice'})
         }
     except Exception as e:
-        print(f"Error in get single invoice handler: {str(e)}")
+        logger.error(f"Error in get single invoice handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -460,14 +463,14 @@ def _handle_patch_status(event, headers):
             'body': json.dumps({'error': 'Invalid JSON in request body'})
         }
     except ClientError as e:
-        print(f"AWS error in PATCH /api/invoices/{{id}}/status: {str(e)}")
+        logger.error(f"AWS error in PATCH /api/invoices/{{id}}/status: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to update invoice status'})
         }
     except Exception as e:
-        print(f"Error in patch status handler: {str(e)}")
+        logger.error(f"Error in patch status handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,

@@ -13,7 +13,10 @@ Functions:
     create_monthly_email_body(name, month_label, total_hours, total_pay) -> str
 """
 
+import logging
 import boto3
+
+logger = logging.getLogger(__name__)
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
@@ -81,7 +84,7 @@ def send_email(to_addresses, subject, body_text, attachments=None, from_email="n
         # Log error and re-raise
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']
-        print(f"SES send failed: {error_code} - {error_message}")
+        logger.error(f"SES send failed: {error_code} - {error_message}")
         raise
 
 

@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import os
 import boto3
@@ -8,6 +9,8 @@ from botocore.exceptions import ClientError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_invoice
+
+logger = logging.getLogger(__name__)
 
 # Initialize S3 client
 s3_client = boto3.client('s3')
@@ -117,7 +120,7 @@ def handler(event, context):
         bucket_name = os.environ.get('InvoiStorage')
 
         if not bucket_name:
-            print("Error: InvoiStorage bucket name not found in environment")
+            logger.error("Error: InvoiStorage bucket name not found in environment")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -146,7 +149,7 @@ def handler(event, context):
             }
 
         except ClientError as e:
-            print(f"S3 error generating presigned URL: {str(e)}")
+            logger.error(f"S3 error generating presigned URL: {str(e)}")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -154,14 +157,14 @@ def handler(event, context):
             }
 
     except ClientError as e:
-        print(f"DynamoDB error in GET /api/pdf/{{id}}: {str(e)}")
+        logger.error(f"DynamoDB error in GET /api/pdf/{{id}}: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to retrieve invoice'})
         }
     except Exception as e:
-        print(f"Unhandled error in pdf handler: {str(e)}")
+        logger.error(f"Unhandled error in pdf handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,

@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import os
 from datetime import datetime
@@ -12,6 +13,8 @@ from services.db_service import get_user
 from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
 from services.mail_service import send_weekly_email
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger(__name__)
 
 # S3 client for logo fetching
 s3_client = boto3.client('s3')
@@ -215,7 +218,7 @@ def handler(event, context):
                 logo_data = _fetch_logo_from_s3(logo_key)
             except Exception as e:
                 # Log error but don't fail - invoice can be generated without logo
-                print(f"Failed to fetch logo from S3: {str(e)}")
+                logger.warning(f"Failed to fetch logo from S3: {str(e)}")
 
         try:
             pdf_bytes = generate_weekly_invoice(
@@ -230,7 +233,7 @@ def handler(event, context):
                 logo_data=logo_data
             )
         except Exception as e:
-            print(f"PDF generation failed: {str(e)}")
+            logger.error(f"PDF generation failed: {str(e)}")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -268,7 +271,7 @@ def handler(event, context):
         try:
             save_pdf_to_s3(pdf_bytes, bucket_name, s3_key)
         except Exception as e:
-            print(f"S3 upload failed: {str(e)}")
+            logger.error(f"S3 upload failed: {str(e)}")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -285,7 +288,7 @@ def handler(event, context):
             invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
             invoices_table.put_item(Item=invoice_metadata)
         except ClientError as e:
-            print(f"Failed to update invoice metadata: {str(e)}")
+            logger.error(f"Failed to update invoice metadata: {str(e)}")
             # PDF is already saved, so this is not a critical failure
             # Log and continue
 
@@ -345,7 +348,7 @@ def handler(event, context):
                         response_data['sent'] = email_recipients
                         response_data['status'] = 'sent'
                     except ClientError as e:
-                        print(f"Failed to update invoice status after email send: {str(e)}")
+                        logger.error(f"Failed to update invoice status after email send: {str(e)}")
                         # Email was sent but status update failed
                         # Keep status as 'draft' to match database state
                         response_data['sent'] = []
@@ -354,7 +357,7 @@ def handler(event, context):
                 except Exception as e:
                     # Email failed but invoice was saved successfully
                     # Return success with warning rather than failing the entire operation
-                    print(f"Email send failed: {str(e)}")
+                    logger.error(f"Email send failed: {str(e)}")
                     email_warning = f"Invoice saved but email failed: {str(e)}"
                     response_data['sent'] = []
                     response_data['emailWarning'] = email_warning
@@ -376,21 +379,21 @@ def handler(event, context):
             'body': json.dumps({'error': 'Invalid JSON in request body'})
         }
     except ValueError as e:
-        print(f"Validation error in POST /api/submit/weekly: {str(e)}")
+        logger.error(f"Validation error in POST /api/submit/weekly: {str(e)}")
         return {
             'statusCode': 400,
             'headers': headers,
             'body': json.dumps({'error': str(e)})
         }
     except ClientError as e:
-        print(f"AWS error in POST /api/submit/weekly: {str(e)}")
+        logger.error(f"AWS error in POST /api/submit/weekly: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to generate weekly invoice'})
         }
     except Exception as e:
-        print(f"Unhandled error in submit_weekly handler: {str(e)}")
+        logger.error(f"Unhandled error in submit_weekly handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -509,7 +512,7 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
         if error_code == 'TransactionCanceledException':
             # Transaction failed - likely duplicate invoiceId or user not found
             cancellation_reasons = e.response.get('CancellationReasons', [])
-            print(f"Transaction cancelled: {cancellation_reasons}")
+            logger.error(f"Transaction cancelled: {cancellation_reasons}")
             raise ValueError('Invoice already exists or user configuration error')
         raise
 
@@ -548,7 +551,7 @@ def _populate_hours_from_default_shift(default_shift):
     except (ValueError, AttributeError) as e:
         # Invalid time format in default shift configuration
         error_msg = f"Invalid time format in default shift: start='{start_time}', end='{end_time}'. Expected format: HH:MM"
-        print(f"ERROR: {error_msg} - {str(e)}")
+        logger.error(f"ERROR: {error_msg} - {str(e)}")
         raise ValueError(error_msg)
 
     # Validate that calculated hours are positive and reasonable
@@ -584,7 +587,7 @@ def _populate_hours_from_default_shift(default_shift):
         if full_day:
             hours[full_day] = hours_per_shift
         else:
-            print(f"WARNING: Unrecognized day abbreviation '{abbrev_day}' in default shift configuration. Expected one of: {', '.join(day_mapping.keys())}")
+            logger.warning(f"WARNING: Unrecognized day abbreviation '{abbrev_day}' in default shift configuration. Expected one of: {', '.join(day_mapping.keys())}")
 
     return hours
 
@@ -642,5 +645,5 @@ def _fetch_logo_from_s3(logo_key):
 
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-        print(f"Failed to fetch logo from S3 (key: {logo_key}): {error_code}")
+        logger.warning(f"Failed to fetch logo from S3 (key: {logo_key}): {error_code}")
         raise

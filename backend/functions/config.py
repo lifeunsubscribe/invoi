@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import sys
 import os
@@ -8,6 +9,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_user, put_user
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger(__name__)
 
 
 def handler(event, context):
@@ -77,7 +80,7 @@ def handler(event, context):
 
     except Exception as e:
         # Log error for CloudWatch
-        print(f"Unhandled error in config handler: {str(e)}")
+        logger.error(f"Unhandled error in config handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -106,7 +109,7 @@ def handle_get(user_id, headers):
         }
 
     except ClientError as e:
-        print(f"DynamoDB error in GET /api/config: {str(e)}")
+        logger.error(f"DynamoDB error in GET /api/config: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -170,14 +173,14 @@ def handle_post(user_id, event, headers):
             'body': json.dumps({'error': 'Invalid JSON in request body'})
         }
     except ClientError as e:
-        print(f"DynamoDB error in POST /api/config: {str(e)}")
+        logger.error(f"DynamoDB error in POST /api/config: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to update user profile'})
         }
     except Exception as e:
-        print(f"Unexpected error in POST /api/config: {str(e)}")
+        logger.error(f"Unexpected error in POST /api/config: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,

@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import os
 import base64
@@ -10,6 +11,8 @@ from botocore.exceptions import ClientError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_user, put_user
+
+logger = logging.getLogger(__name__)
 
 # S3 client for logo storage
 s3_client = boto3.client('s3')
@@ -113,7 +116,7 @@ def handler(event, context):
 
     except Exception as e:
         # Log error for CloudWatch
-        print(f"Unhandled error in logo handler: {str(e)}")
+        logger.error(f"Unhandled error in logo handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -171,7 +174,7 @@ def handle_get(user_id, headers):
                     'body': json.dumps({'error': 'Logo file not found in storage'})
                 }
             else:
-                print(f"S3 error fetching logo: {error_code} - {str(e)}")
+                logger.error(f"S3 error fetching logo: {error_code} - {str(e)}")
                 return {
                     'statusCode': 500,
                     'headers': headers,
@@ -179,7 +182,7 @@ def handle_get(user_id, headers):
                 }
 
     except Exception as e:
-        print(f"Unexpected error in logo retrieval: {str(e)}")
+        logger.error(f"Unexpected error in logo retrieval: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -299,10 +302,10 @@ def handle_upload(user_id, event, headers):
             old_logo_key = user['logoKey']
             try:
                 s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_logo_key)
-                print(f"Deleted old logo: {old_logo_key}")
+                logger.info(f"Deleted old logo: {old_logo_key}")
             except ClientError as e:
                 # Log but don't fail - old file might already be deleted
-                print(f"Failed to delete old logo (non-fatal): {str(e)}")
+                logger.warning(f"Failed to delete old logo (non-fatal): {str(e)}")
 
         s3_client.put_object(
             Bucket=BUCKET_NAME,
@@ -340,14 +343,14 @@ def handle_upload(user_id, event, headers):
         }
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-        print(f"AWS error in logo upload: {error_code} - {str(e)}")
+        logger.error(f"AWS error in logo upload: {error_code} - {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to upload logo to storage'})
         }
     except Exception as e:
-        print(f"Unexpected error in logo upload: {str(e)}")
+        logger.error(f"Unexpected error in logo upload: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -381,7 +384,7 @@ def handle_delete(user_id, headers):
             )
         except ClientError as e:
             # Log error but don't fail - we still want to clear the user record
-            print(f"S3 delete error (non-fatal): {str(e)}")
+            logger.warning(f"S3 delete error (non-fatal): {str(e)}")
 
         # Clear logo fields from user record
         user['logoKey'] = ''
@@ -396,14 +399,14 @@ def handle_delete(user_id, headers):
         }
 
     except ClientError as e:
-        print(f"DynamoDB error in logo delete: {str(e)}")
+        logger.error(f"DynamoDB error in logo delete: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to delete logo'})
         }
     except Exception as e:
-        print(f"Unexpected error in logo delete: {str(e)}")
+        logger.error(f"Unexpected error in logo delete: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,

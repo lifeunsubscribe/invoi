@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import os
 from datetime import datetime
@@ -13,6 +14,8 @@ from services.db_service import query_invoices, get_user, put_invoice
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger(__name__)
 
 # S3 client for logo fetching
 s3_client = boto3.client('s3')
@@ -188,7 +191,7 @@ def handler(event, context):
                 logo_data = _fetch_logo_from_s3(logo_key)
             except Exception as e:
                 # Log error but don't fail - report can be generated without logo
-                print(f"Failed to fetch logo from S3: {str(e)}")
+                logger.warning(f"Failed to fetch logo from S3: {str(e)}")
 
         # Generate monthly report PDF
         # Uses user's template, rate, and other config from user_config
@@ -312,7 +315,7 @@ def handler(event, context):
                 except Exception as e:
                     # Email failed but report was saved successfully
                     # Return success with warning rather than failing the entire operation
-                    print(f"Email send failed: {str(e)}")
+                    logger.error(f"Email send failed: {str(e)}")
                     email_warning = f"Report saved but email failed: {str(e)}"
                     response_data['sent'] = []
                     response_data['emailWarning'] = email_warning
@@ -338,14 +341,14 @@ def handler(event, context):
             'body': json.dumps({'error': 'Invalid JSON in request body'})
         }
     except ClientError as e:
-        print(f"AWS error in POST /api/submit/monthly: {str(e)}")
+        logger.error(f"AWS error in POST /api/submit/monthly: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to generate monthly report'})
         }
     except Exception as e:
-        print(f"Unhandled error in submit_monthly handler: {str(e)}")
+        logger.error(f"Unhandled error in submit_monthly handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -406,5 +409,5 @@ def _fetch_logo_from_s3(logo_key):
 
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-        print(f"Failed to fetch logo from S3 (key: {logo_key}): {error_code}")
+        logger.warning(f"Failed to fetch logo from S3 (key: {logo_key}): {error_code}")
         raise
