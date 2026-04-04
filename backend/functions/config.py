@@ -141,7 +141,7 @@ def handle_post(user_id, event, headers):
             'name', 'email', 'rate', 'address', 'personalEmail', 'agency',
             'accountantEmail', 'invoiceNote', 'saveFolder', 'clientName',
             'clientEmail', 'occupation', 'accent', 'template', 'signatureFont',
-            'clients', 'activeClientId', 'invoiceNumberConfig'
+            'clients', 'activeClientId', 'invoiceNumberConfig', 'logoKey', 'logoSize'
         ]
         user_data = {
             'userId': user_id
