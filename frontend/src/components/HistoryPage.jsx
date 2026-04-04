@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { getAuthToken } from "../auth.jsx";
+import CalendarView from "./CalendarView.jsx";
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -112,6 +113,7 @@ export default function HistoryPage({ config, onBack }) {
   const [loading, setLoading] = useState(true);
   const [invoices, setInvoices] = useState([]);
   const [error, setError] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
 
   // Fetch invoices from API
   useEffect(() => {
@@ -163,6 +165,16 @@ export default function HistoryPage({ config, onBack }) {
   const handleViewChange = (view) => {
     setActiveView(view);
     localStorage.setItem("history-view-preference", view);
+  };
+
+  // Handle invoice click (open detail panel)
+  const handleInvoiceClick = (invoice) => {
+    setSelectedInvoice(invoice);
+  };
+
+  // Close invoice detail panel
+  const handleCloseDetail = () => {
+    setSelectedInvoice(null);
   };
 
   const acc = config.accent;
@@ -334,48 +346,283 @@ export default function HistoryPage({ config, onBack }) {
               </div>
             )}
 
-            {/* Placeholder for View Content (when invoices exist) */}
+            {/* View Content (when invoices exist) */}
             {!loading && !error && invoices.length > 0 && (
-              <div style={{
-                background: "white",
-                borderRadius: 12,
-                padding: "32px",
-                border: `1px solid ${chrome.border}`
-              }}>
-                <div style={{
-                  textAlign: "center",
-                  padding: "20px"
-                }}>
+              <>
+                {activeView === "calendar" && (
+                  <CalendarView
+                    invoices={invoices}
+                    config={config}
+                    onInvoiceClick={handleInvoiceClick}
+                  />
+                )}
+
+                {activeView === "list" && (
                   <div style={{
-                    fontSize: 36,
-                    marginBottom: 12
+                    background: "white",
+                    borderRadius: 12,
+                    padding: "32px",
+                    border: `1px solid ${chrome.border}`
                   }}>
-                    {activeView === "calendar" ? "📅" : activeView === "list" ? "📋" : "🎯"}
+                    <div style={{
+                      textAlign: "center",
+                      padding: "20px"
+                    }}>
+                      <div style={{
+                        fontSize: 36,
+                        marginBottom: 12
+                      }}>
+                        📋
+                      </div>
+                      <div style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: "#6a4a40",
+                        marginBottom: 6
+                      }}>
+                        List View
+                      </div>
+                      <div style={{
+                        fontSize: 12,
+                        color: "#9a8070",
+                        lineHeight: 1.4
+                      }}>
+                        Found {invoices.length} invoice{invoices.length !== 1 ? "s" : ""}.
+                        View implementation coming soon.
+                      </div>
+                    </div>
                   </div>
+                )}
+
+                {activeView === "focus" && (
                   <div style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#6a4a40",
-                    marginBottom: 6
+                    background: "white",
+                    borderRadius: 12,
+                    padding: "32px",
+                    border: `1px solid ${chrome.border}`
                   }}>
-                    {activeView === "calendar" ? "Calendar View" :
-                     activeView === "list" ? "List View" :
-                     "Focus View"}
+                    <div style={{
+                      textAlign: "center",
+                      padding: "20px"
+                    }}>
+                      <div style={{
+                        fontSize: 36,
+                        marginBottom: 12
+                      }}>
+                        🎯
+                      </div>
+                      <div style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: "#6a4a40",
+                        marginBottom: 6
+                      }}>
+                        Focus View
+                      </div>
+                      <div style={{
+                        fontSize: 12,
+                        color: "#9a8070",
+                        lineHeight: 1.4
+                      }}>
+                        Found {invoices.length} invoice{invoices.length !== 1 ? "s" : ""}.
+                        View implementation coming soon.
+                      </div>
+                    </div>
                   </div>
-                  <div style={{
-                    fontSize: 12,
-                    color: "#9a8070",
-                    lineHeight: 1.4
-                  }}>
-                    Found {invoices.length} invoice{invoices.length !== 1 ? "s" : ""}.
-                    View implementation coming soon.
-                  </div>
-                </div>
-              </div>
+                )}
+              </>
             )}
           </div>
         </div>
       </div>
+
+      {/* Invoice Detail Panel (Modal) */}
+      {selectedInvoice && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 20
+          }}
+          onClick={handleCloseDetail}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 12,
+              padding: "24px",
+              maxWidth: 500,
+              width: "100%",
+              maxHeight: "80vh",
+              overflowY: "auto",
+              border: `2px solid ${chrome.border}`,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.2)"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 20,
+              paddingBottom: 16,
+              borderBottom: `1px solid ${chrome.border}`
+            }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: 18,
+                fontWeight: 700,
+                color: "#6a4a40"
+              }}>
+                Invoice Details
+              </h2>
+              <button
+                onClick={handleCloseDetail}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: 24,
+                  color: chrome.mutedText,
+                  cursor: "pointer",
+                  padding: "0 8px",
+                  lineHeight: 1
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Invoice Information */}
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 12
+            }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: chrome.mutedText, marginBottom: 4 }}>
+                  INVOICE NUMBER
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#6a4a40" }}>
+                  {selectedInvoice.invoiceNumber || selectedInvoice.invoiceId}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: chrome.mutedText, marginBottom: 4 }}>
+                  CLIENT
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#6a4a40" }}>
+                  {selectedInvoice.clientId || "Unknown Client"}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: chrome.mutedText, marginBottom: 4 }}>
+                  PERIOD
+                </div>
+                <div style={{ fontSize: 14, color: "#6a4a40" }}>
+                  {selectedInvoice.weekStart} to {selectedInvoice.weekEnd}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: chrome.mutedText, marginBottom: 4 }}>
+                  TOTAL HOURS
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#6a4a40" }}>
+                  {selectedInvoice.totalHours || 0} hours
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: chrome.mutedText, marginBottom: 4 }}>
+                  TOTAL AMOUNT
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: acc }}>
+                  ${(selectedInvoice.totalPay || 0).toFixed(2)}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: chrome.mutedText, marginBottom: 4 }}>
+                  STATUS
+                </div>
+                <div style={{
+                  display: "inline-block",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  background: selectedInvoice.status === "paid" ? "#5a8a5a" :
+                              selectedInvoice.status === "sent" ? "#4a94b4" :
+                              selectedInvoice.status === "draft" ? "#9a8070" : "#d4601a",
+                  color: "white"
+                }}>
+                  {(selectedInvoice.status || "draft").toUpperCase()}
+                </div>
+              </div>
+
+              {selectedInvoice.sentAt && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: chrome.mutedText, marginBottom: 4 }}>
+                    SENT ON
+                  </div>
+                  <div style={{ fontSize: 14, color: "#6a4a40" }}>
+                    {new Date(selectedInvoice.sentAt).toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric"
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {selectedInvoice.dueDate && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: chrome.mutedText, marginBottom: 4 }}>
+                    DUE DATE
+                  </div>
+                  <div style={{ fontSize: 14, color: "#6a4a40" }}>
+                    {new Date(selectedInvoice.dueDate).toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric"
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Close Button */}
+            <button
+              onClick={handleCloseDetail}
+              style={{
+                marginTop: 20,
+                width: "100%",
+                fontSize: 13,
+                fontWeight: 600,
+                padding: "12px",
+                borderRadius: 8,
+                border: "none",
+                background: acc,
+                color: "white",
+                cursor: "pointer"
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </Shell>
   );
 }

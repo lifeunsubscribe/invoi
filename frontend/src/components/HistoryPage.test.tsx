@@ -111,7 +111,7 @@ describe('HistoryPage', () => {
     expect(localStorage.getItem('history-view-preference')).toBe('calendar')
   })
 
-  it('displays placeholder when invoices exist', async () => {
+  it('displays list view placeholder when invoices exist', async () => {
     // Mock fetch to return invoices
     global.fetch = vi.fn(() =>
       Promise.resolve({
@@ -134,6 +134,44 @@ describe('HistoryPage', () => {
 
     expect(screen.getByText(/List View/i)).toBeInTheDocument()
     expect(screen.getByText(/View implementation coming soon/i)).toBeInTheDocument()
+  })
+
+  it('renders CalendarView when calendar view is active with invoices', async () => {
+    // Mock fetch to return invoices
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          invoices: [
+            {
+              invoiceId: 'INV-001',
+              invoiceNumber: 'INV-001',
+              clientId: 'Test Client',
+              weekStart: '2026-01-06',
+              weekEnd: '2026-01-12',
+              totalHours: 40,
+              totalPay: 1120.0,
+              status: 'sent'
+            }
+          ]
+        })
+      })
+    ) as any
+
+    // Set view preference to calendar
+    localStorage.setItem('history-view-preference', 'calendar')
+
+    render(<HistoryPage config={mockConfig} onBack={vi.fn()} />)
+
+    // Wait for invoices to load
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading your invoices/i)).not.toBeInTheDocument()
+    })
+
+    // Calendar view should render weekday headers
+    expect(screen.getByText('Sun')).toBeInTheDocument()
+    expect(screen.getByText('Mon')).toBeInTheDocument()
+    expect(screen.getByText('Sat')).toBeInTheDocument()
   })
 
   it('handles API endpoint not found gracefully', async () => {
