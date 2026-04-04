@@ -321,6 +321,37 @@ class TestPatchInvoiceStatus:
         assert 'error' in body
         assert 'not found' in body['error'].lower()
 
+    def test_patch_other_users_invoice_returns_403(self):
+        """PATCH for invoice belonging to another user should return 403"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'PATCH'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'pathParameters': {'id': 'INV-20260324'},
+            'body': json.dumps({'status': 'paid'})
+        }
+
+        # Mock invoice that belongs to a different user
+        mock_invoice = {
+            'userId': 'user-456',  # Different user
+            'invoiceId': 'INV-20260324',
+            'status': 'sent'
+        }
+
+        with patch('functions.invoices.get_invoice', return_value=mock_invoice):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 403
+        body = json.loads(response['body'])
+        assert 'error' in body
+        assert 'unauthorized' in body['error'].lower()
+
     def test_patch_handles_dynamodb_error(self):
         """PATCH should return 500 when DynamoDB operation fails"""
         event = {

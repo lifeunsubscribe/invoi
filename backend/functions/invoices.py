@@ -160,7 +160,7 @@ def handler(event, context):
                     'invoiceId': invoice_id,
                     'status': updated_invoice.get('status'),
                     'paidAt': updated_invoice.get('paidAt'),
-                    'updatedAt': datetime.now(timezone.utc).isoformat()
+                    'updatedAt': updated_invoice.get('updatedAt')
                 })
             }
 
