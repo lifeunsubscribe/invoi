@@ -10,6 +10,7 @@ from services.db_service import query_invoices
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 def handler(event, context):

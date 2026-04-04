@@ -16,6 +16,7 @@ from services.mail_service import send_monthly_email
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # S3 client for logo fetching
 s3_client = boto3.client('s3')

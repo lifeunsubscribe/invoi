@@ -13,6 +13,7 @@ from services.db_service import get_invoice, get_user
 from services.mail_service import send_email
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # S3 client for fetching PDFs
 s3_client = boto3.client('s3')
@@ -109,7 +110,7 @@ def handler(event, context):
         # Get bucket name from environment
         bucket_name = os.environ.get('InvoiStorage') or os.environ.get('SST_Resource_InvoiStorage_name')
         if not bucket_name:
-            logger.error("Error: InvoiStorage bucket name not found in environment")
+            logger.error("InvoiStorage bucket name not found in environment")
             return {
                 'statusCode': 500,
                 'headers': headers,

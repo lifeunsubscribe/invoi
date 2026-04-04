@@ -15,6 +15,7 @@ from services.mail_service import send_weekly_email
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # S3 client for logo fetching
 s3_client = boto3.client('s3')
@@ -551,7 +552,7 @@ def _populate_hours_from_default_shift(default_shift):
     except (ValueError, AttributeError) as e:
         # Invalid time format in default shift configuration
         error_msg = f"Invalid time format in default shift: start='{start_time}', end='{end_time}'. Expected format: HH:MM"
-        logger.error(f"ERROR: {error_msg} - {str(e)}")
+        logger.error(f"{error_msg} - {str(e)}")
         raise ValueError(error_msg)
 
     # Validate that calculated hours are positive and reasonable
@@ -587,7 +588,7 @@ def _populate_hours_from_default_shift(default_shift):
         if full_day:
             hours[full_day] = hours_per_shift
         else:
-            logger.warning(f"WARNING: Unrecognized day abbreviation '{abbrev_day}' in default shift configuration. Expected one of: {', '.join(day_mapping.keys())}")
+            logger.warning(f"Unrecognized day abbreviation '{abbrev_day}' in default shift configuration. Expected one of: {', '.join(day_mapping.keys())}")
 
     return hours
 

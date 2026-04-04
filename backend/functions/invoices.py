@@ -11,6 +11,7 @@ from services.db_service import update_invoice_status, get_invoice, query_invoic
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 def handler(event, context):
