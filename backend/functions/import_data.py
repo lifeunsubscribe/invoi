@@ -5,7 +5,6 @@ import base64
 import boto3
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
-from io import BytesIO
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -160,9 +159,20 @@ def _validate_invoice_json(json_data):
         if field not in json_data:
             return False, f"Missing required field: {field}"
 
-    # Validate date format
+    # Validate invoiceNumber is a non-empty string
+    invoice_num = json_data.get('invoiceNumber')
+    if not isinstance(invoice_num, str) or not invoice_num.strip():
+        return False, "invoiceNumber must be a non-empty string"
+
+    # Validate date format and reasonable range
     try:
-        datetime.strptime(json_data['date'], '%Y-%m-%d')
+        date_obj = datetime.strptime(json_data['date'], '%Y-%m-%d')
+        # Ensure date is within reasonable range (1990 to 10 years in future)
+        # This prevents data pollution from malformed dates
+        min_year = 1990
+        max_year = datetime.now(timezone.utc).year + 10
+        if date_obj.year < min_year or date_obj.year > max_year:
+            return False, f"Invoice date must be between {min_year} and {max_year}"
     except ValueError:
         return False, "Invalid date format (expected YYYY-MM-DD)"
 
@@ -181,10 +191,13 @@ def _create_invoice_record(user_id, json_data, pdf_s3_key):
 
     Maps sidecar JSON schema to DynamoDB Invoices table schema.
     """
-    # Generate invoiceId from date (matches existing pattern: INV-YYYYMMDD)
+    # Generate unique invoiceId from date + invoice number
+    # Format: INV-YYYYMMDD-{invoiceNumber} to ensure uniqueness when multiple invoices exist per day
     # This serves as the sort key for DynamoDB queries by date range
     date_obj = datetime.strptime(json_data['date'], '%Y-%m-%d')
-    invoice_id = f"INV-{date_obj.strftime('%Y%m%d')}"
+    # Sanitize invoice number for use in ID (remove spaces, special chars)
+    sanitized_invoice_num = json_data.get('invoiceNumber', '').replace(' ', '-').replace('/', '-')
+    invoice_id = f"INV-{date_obj.strftime('%Y%m%d')}-{sanitized_invoice_num}"
 
     # Build invoice record matching DynamoDB Invoices table schema (see docs/ADR-webapp-migration.md)
     invoice = {
@@ -346,8 +359,10 @@ def handler(event, context):
                 # Generate S3 key for PDF using multi-tenant isolation pattern
                 # Format: users/{userId}/weekly/{invoiceId}.pdf
                 # This ensures users can only access their own files via signed URLs
+                # Use same unique ID generation as _create_invoice_record to ensure consistency
                 date_obj = datetime.strptime(json_data['date'], '%Y-%m-%d')
-                invoice_id = f"INV-{date_obj.strftime('%Y%m%d')}"
+                sanitized_invoice_num = json_data.get('invoiceNumber', '').replace(' ', '-').replace('/', '-')
+                invoice_id = f"INV-{date_obj.strftime('%Y%m%d')}-{sanitized_invoice_num}"
                 s3_key = f"users/{user_id}/weekly/{invoice_id}.pdf"
 
                 # Upload PDF to S3 with metadata for tracking

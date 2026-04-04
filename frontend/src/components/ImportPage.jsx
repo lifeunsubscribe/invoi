@@ -121,6 +121,9 @@ export default function ImportPage({ config, onBack }) {
       for (let i = 0; i < pairs.length; i++) {
         const pair = pairs[i];
 
+        // Update progress as we process each file
+        setProgress({ current: i + 1, total: pairs.length });
+
         // Read and parse JSON file to validate structure before upload
         const jsonText = await pair.jsonFile.text();
         try {
