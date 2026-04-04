@@ -143,6 +143,12 @@ export default $config({
       memory: "512 MB",
     });
 
+    // Phase 3: Update invoice status (mark paid, sent, etc.)
+    api.route("PATCH /api/invoices/{id}/status", {
+      handler: "backend/functions/invoices.handler",
+      link: [invoicesTable],
+    });
+
     // Phase 3: Test SES email sending (temporary endpoint for validation)
     // Restricted to dev stage and requires TEST_SES_SECRET header for authentication
     if ($app.stage === "dev") {
