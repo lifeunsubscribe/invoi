@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { getAuthToken } from "../auth.jsx";
 import CalendarView from "./CalendarView.jsx";
+import ListView from "./ListView.jsx";
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -358,40 +359,11 @@ export default function HistoryPage({ config, onBack }) {
                 )}
 
                 {activeView === "list" && (
-                  <div style={{
-                    background: "white",
-                    borderRadius: 12,
-                    padding: "32px",
-                    border: `1px solid ${chrome.border}`
-                  }}>
-                    <div style={{
-                      textAlign: "center",
-                      padding: "20px"
-                    }}>
-                      <div style={{
-                        fontSize: 36,
-                        marginBottom: 12
-                      }}>
-                        📋
-                      </div>
-                      <div style={{
-                        fontSize: 14,
-                        fontWeight: 600,
-                        color: "#6a4a40",
-                        marginBottom: 6
-                      }}>
-                        List View
-                      </div>
-                      <div style={{
-                        fontSize: 12,
-                        color: "#9a8070",
-                        lineHeight: 1.4
-                      }}>
-                        Found {invoices.length} invoice{invoices.length !== 1 ? "s" : ""}.
-                        View implementation coming soon.
-                      </div>
-                    </div>
-                  </div>
+                  <ListView
+                    invoices={invoices}
+                    config={config}
+                    onInvoiceClick={handleInvoiceClick}
+                  />
                 )}
 
                 {activeView === "focus" && (
