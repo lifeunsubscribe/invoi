@@ -44,7 +44,8 @@ export function isAuthenticated() {
 
   // [Phase 5] Temporary: Check for ?authenticated=false in URL to demo landing page
   // This allows testing the unauthenticated landing page without breaking existing flows
-  if (typeof window !== 'undefined') {
+  // Only available in development mode to prevent production bypass
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
     const params = new URLSearchParams(window.location.search);
     if (params.get('authenticated') === 'false') {
       return false;

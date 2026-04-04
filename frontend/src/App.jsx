@@ -3732,7 +3732,6 @@ export default function App() {
   const handleSignIn = () => {
     // TODO [Phase 1]: Implement real OAuth sign-in flow with Cognito
     // For now, this is a placeholder that will be replaced with actual OAuth
-    console.log('Sign in clicked - OAuth flow will be implemented in Phase 1');
     alert('Sign in with Google will be enabled once OAuth is configured. Check back soon!');
   };
 
