@@ -1004,7 +1004,11 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
 
   const handleLogoSizeChange = async (size) => {
     // Update draft state immediately for responsive UI
-    setDraft(d => ({...d, logoSize: size}));
+    let currentDraft;
+    setDraft(d => {
+      currentDraft = {...d, logoSize: size};
+      return currentDraft;
+    });
 
     // Auto-save logo size preference to backend
     try {
@@ -1015,7 +1019,7 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
           'Content-Type': 'application/json',
           'Authorization': token,
         },
-        body: JSON.stringify({...draft, logoSize: size})
+        body: JSON.stringify(currentDraft)
       });
 
       if (!response.ok) {

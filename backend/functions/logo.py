@@ -287,6 +287,23 @@ def handle_upload(user_id, event, headers):
         # Upload to S3 at users/{userId}/logo.{ext}
         s3_key = f'users/{user_id}/logo.{file_extension}'
 
+        # Get user record to check for existing logo
+        user = get_user(user_id)
+        if not user:
+            # If user doesn't exist yet, create minimal record
+            user = {'userId': user_id}
+
+        # Delete old logo file if it exists with a different extension
+        # This prevents orphaned files when switching between PNG/JPG formats
+        if user.get('logoKey') and user['logoKey'] != s3_key:
+            old_logo_key = user['logoKey']
+            try:
+                s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_logo_key)
+                print(f"Deleted old logo: {old_logo_key}")
+            except ClientError as e:
+                # Log but don't fail - old file might already be deleted
+                print(f"Failed to delete old logo (non-fatal): {str(e)}")
+
         s3_client.put_object(
             Bucket=BUCKET_NAME,
             Key=s3_key,
@@ -299,10 +316,6 @@ def handle_upload(user_id, event, headers):
         )
 
         # Update user record with logo key and size
-        user = get_user(user_id)
-        if not user:
-            # If user doesn't exist yet, create minimal record
-            user = {'userId': user_id}
 
         user['logoKey'] = s3_key
         user['logoSize'] = logo_size
