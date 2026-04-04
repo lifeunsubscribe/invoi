@@ -258,7 +258,12 @@ const OCC_LABELS = {
 
 function getOccLabels(config) {
   const occ = config.occupation || "";
-  return OCC_LABELS[occ] || OCC_LABELS[""];
+  const labels = OCC_LABELS[occ] || OCC_LABELS[""];
+  // Ensure clientFieldLabel always has a fallback value
+  return {
+    ...labels,
+    clientFieldLabel: labels.clientFieldLabel || "Client",
+  };
 }
 
 // Helper to determine if occupation requires health-specific fields (vitals, medications)
@@ -293,11 +298,14 @@ function getActiveClient(config) {
   const client = active || clients[0] || { id:"", name:"", address:"", objective:"", defaultShift:{start:"09:00",end:"17:00"}, meds:[] };
 
   // Migration: handle legacy patientName/patientAddress fields
-  if (client.patientName && !client.name) {
-    client.name = client.patientName;
-  }
-  if (client.patientAddress && !client.address) {
-    client.address = client.patientAddress;
+  // Return a new object to avoid mutating the shared reference
+  const needsMigration = (client.patientName && !client.name) || (client.patientAddress && !client.address);
+  if (needsMigration) {
+    return {
+      ...client,
+      name: client.name || client.patientName,
+      address: client.address || client.patientAddress,
+    };
   }
 
   return client;
