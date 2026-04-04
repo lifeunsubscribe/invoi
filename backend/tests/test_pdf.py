@@ -166,8 +166,8 @@ class TestGetPdfUrl:
         assert 'error' in body
         assert 'not found' in body['error'].lower()
 
-    def test_get_pdf_url_other_users_invoice_returns_403(self):
-        """GET /api/pdf/{id} for invoice belonging to another user should return 403"""
+    def test_get_pdf_url_other_users_invoice_returns_404(self):
+        """GET /api/pdf/{id} for invoice belonging to another user should return 404"""
         event = {
             'requestContext': {
                 'http': {'method': 'GET'},
@@ -191,10 +191,10 @@ class TestGetPdfUrl:
         with patch('functions.pdf.get_invoice', return_value=mock_invoice):
             response = handler(event, {})
 
-        assert response['statusCode'] == 403
+        assert response['statusCode'] == 404
         body = json.loads(response['body'])
         assert 'error' in body
-        assert 'unauthorized' in body['error'].lower()
+        assert 'not found' in body['error'].lower()
 
     def test_get_pdf_url_invoice_without_pdf_returns_404(self):
         """GET /api/pdf/{id} for invoice without pdfKey should return 404"""
@@ -240,6 +240,28 @@ class TestGetPdfUrl:
             },
             'headers': {'Authorization': 'Bearer valid-token'},
             'pathParameters': {}
+        }
+
+        response = handler(event, {})
+
+        assert response['statusCode'] == 400
+        body = json.loads(response['body'])
+        assert 'error' in body
+        assert 'invoice id' in body['error'].lower()
+
+    def test_get_pdf_url_null_path_parameters_returns_400(self):
+        """GET /api/pdf with pathParameters: None should return 400"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'pathParameters': None
         }
 
         response = handler(event, {})

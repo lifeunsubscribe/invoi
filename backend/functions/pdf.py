@@ -19,9 +19,9 @@ def handler(event, context):
 
     Returns:
         200: Signed S3 URL (valid for 15 minutes)
+        400: Missing invoice ID in path
         401: Missing or invalid authorization
-        403: Invoice not owned by authenticated user
-        404: Invoice not found or PDF not available
+        404: Invoice not found, not owned by user, or PDF not available
         500: Server error
     """
     # CORS headers for all responses
@@ -77,19 +77,13 @@ def handler(event, context):
         # Retrieve invoice from DynamoDB
         invoice = get_invoice(user_id, invoice_id)
 
-        if not invoice:
+        # Return 404 for both non-existent invoices AND invoices not owned by user
+        # to prevent invoice ID enumeration attacks
+        if not invoice or invoice.get('userId') != user_id:
             return {
                 'statusCode': 404,
                 'headers': headers,
                 'body': json.dumps({'error': f'Invoice {invoice_id} not found'})
-            }
-
-        # Verify invoice ownership (defense-in-depth authorization)
-        if invoice.get('userId') != user_id:
-            return {
-                'statusCode': 403,
-                'headers': headers,
-                'body': json.dumps({'error': 'Unauthorized: invoice does not belong to user'})
             }
 
         # Extract PDF S3 key from invoice record
