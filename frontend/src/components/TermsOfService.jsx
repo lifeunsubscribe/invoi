@@ -10,7 +10,6 @@
 export default function TermsOfService({ onBack }) {
   const primaryColor = "#b76e79";
   const darkText = "#2c1810";
-  const mediumText = "#6a4a40";
   const lightText = "#9a8070";
   const lightBg = "#fdf8f4";
 
