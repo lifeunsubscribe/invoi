@@ -1,7 +1,7 @@
 import json
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -112,6 +112,14 @@ def handler(event, context):
                 'body': json.dumps({'error': f'Invoice {invoice_id} not found'})
             }
 
+        # Verify invoice ownership (defense-in-depth authorization)
+        if existing_invoice.get('userId') != user_id:
+            return {
+                'statusCode': 403,
+                'headers': headers,
+                'body': json.dumps({'error': 'Unauthorized: invoice does not belong to user'})
+            }
+
         # Calculate overdue status if applicable
         # Overdue logic: status is 'sent' AND dueDate < today
         # This ensures invoices automatically show as overdue when past their due date,
@@ -134,7 +142,7 @@ def handler(event, context):
         # Prepare paidAt timestamp if marking as paid
         paid_at = None
         if new_status == 'paid':
-            paid_at = datetime.now().isoformat()
+            paid_at = datetime.now(timezone.utc).isoformat()
 
         # Update invoice status in DynamoDB
         try:
@@ -152,7 +160,7 @@ def handler(event, context):
                     'invoiceId': invoice_id,
                     'status': updated_invoice.get('status'),
                     'paidAt': updated_invoice.get('paidAt'),
-                    'updatedAt': datetime.now().isoformat()
+                    'updatedAt': datetime.now(timezone.utc).isoformat()
                 })
             }
 
