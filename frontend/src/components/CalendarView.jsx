@@ -70,19 +70,6 @@ function getInvoiceStatus(invoice) {
  * - Keyboard accessible: Tab to navigate, Enter/Space to activate pills
  */
 export default function CalendarView({ invoices, config, onInvoiceClick }) {
-  /**
-   * Handle keyboard interaction on invoice pills
-   * Supports Enter and Space keys for activation
-   */
-  const handlePillKeyDown = (event, invoice) => {
-    // Activate pill on Enter or Space key
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault(); // Prevent Space from scrolling page
-      if (onInvoiceClick) {
-        onInvoiceClick(invoice);
-      }
-    }
-  };
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -342,7 +329,6 @@ export default function CalendarView({ invoices, config, onInvoiceClick }) {
                       <button
                         key={invoice.invoiceId}
                         onClick={() => onInvoiceClick && onInvoiceClick(invoice)}
-                        onKeyDown={(e) => handlePillKeyDown(e, invoice)}
                         aria-label={ariaLabel}
                         className="invoice-pill"
                         style={{
