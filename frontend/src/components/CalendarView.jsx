@@ -329,6 +329,12 @@ export default function CalendarView({ invoices, config, onInvoiceClick }) {
                       <button
                         key={invoice.invoiceId}
                         onClick={() => onInvoiceClick && onInvoiceClick(invoice)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onInvoiceClick && onInvoiceClick(invoice);
+                          }
+                        }}
                         aria-label={ariaLabel}
                         className="invoice-pill"
                         style={{
