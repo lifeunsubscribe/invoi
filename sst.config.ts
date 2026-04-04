@@ -53,17 +53,16 @@ export default $config({
 
     // User pool client for React app
     // Configures OAuth flow with environment-specific callback URLs
-    // Note: In dev, uses localhost. In production, uses placeholder that will be replaced
-    // with actual site URL after deployment (Cognito allows updating callback URLs)
+    // In dev: uses localhost. In production: uses goinvoi.com custom domain
     const userPoolClient = userPool.addClient("Web", {
       providers: ["Google"],
       oauth: {
-        // Use localhost for dev, wildcard placeholder for production (update after first deploy)
+        // Use localhost for dev, custom domain for production
         callbackUrls: [
-          $dev ? "http://localhost:5173/auth/callback" : "https://placeholder-update-after-deploy.com/auth/callback"
+          $dev ? "http://localhost:5173/auth/callback" : "https://goinvoi.com/auth/callback"
         ],
         logoutUrls: [
-          $dev ? "http://localhost:5173/auth/logout" : "https://placeholder-update-after-deploy.com/auth/logout"
+          $dev ? "http://localhost:5173/auth/logout" : "https://goinvoi.com/auth/logout"
         ],
         flows: ["authorization_code"], // Standard OAuth 2.0 flow
         scopes: ["email", "openid", "profile"], // Request user's basic info
@@ -95,9 +94,18 @@ export default $config({
     });
 
     // API Gateway + Lambda functions
+    // In production, uses custom domain api.goinvoi.com with ACM certificate
+    // In dev, uses auto-generated API Gateway URL
     const api = new sst.aws.ApiGatewayV2("InvoiApi", {
+      domain: $app.stage === "production" ? {
+        name: "api.goinvoi.com",
+        dns: sst.aws.dns(), // Use Route53 for DNS management
+      } : undefined,
       cors: {
-        allowOrigins: ["*"],
+        // Allow requests from custom domain in production, localhost in dev
+        allowOrigins: $app.stage === "production"
+          ? ["https://goinvoi.com", "https://www.goinvoi.com"]
+          : ["*"],
         allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allowHeaders: ["Content-Type", "Authorization"],
       },
@@ -268,12 +276,20 @@ export default $config({
 
     // Static site (React frontend) - defined after API/Cognito to pass correct env vars
     // These VITE_* variables are exposed to the React app at build time
+    // In production, uses custom domain goinvoi.com with ACM certificate and CloudFront
+    // ACM certificate is created in us-east-1 (required for CloudFront)
+    // DNS validation happens automatically via Route53
     const site = new sst.aws.StaticSite("InvoiWeb", {
       path: "frontend",
       build: {
         command: "npm run build",
         output: "dist",
       },
+      domain: $app.stage === "production" ? {
+        name: "goinvoi.com",
+        aliases: ["www.goinvoi.com"], // Redirect www to apex
+        dns: sst.aws.dns(), // Use Route53 for DNS management
+      } : undefined,
       environment: {
         VITE_API_URL: api.url,
         VITE_COGNITO_USER_POOL_ID: userPool.id,
@@ -292,6 +308,10 @@ export default $config({
       hostedUI: userPool.domainUrl,
       sesIdentity: emailIdentity.email,  // SES verified domain
       sesDkimTokens: domainDkim.dkimTokens,  // DKIM tokens for DNS configuration
+      // Custom domain outputs (production only)
+      // After deploying to production, point your domain registrar to the Route53 nameservers
+      customDomain: $app.stage === "production" ? "goinvoi.com" : "N/A (dev stage)",
+      apiDomain: $app.stage === "production" ? "api.goinvoi.com" : "N/A (dev stage)",
     };
   },
 });
