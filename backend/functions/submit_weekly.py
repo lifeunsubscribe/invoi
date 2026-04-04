@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_user
 from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
+from services.mail_service import send_weekly_email
 from botocore.exceptions import ClientError
 
 # Re-export for test imports
@@ -281,15 +282,69 @@ def handler(event, context):
             'totalHours': invoice_metadata['totalHours'],
             'totalPay': invoice_metadata['totalPay'],
             'status': invoice_metadata['status'],
-            'createdAt': invoice_metadata['createdAt']
+            'createdAt': invoice_metadata['createdAt'],
+            'sent': []  # Initialize sent field - will be populated if email is sent
         }
 
-        # If not save_only mode, would send email here (Phase 3)
-        # For now, always return save-only response
+        # Phase 3: Send email via SES if not save_only mode
+        # Email failures are handled gracefully - the invoice is saved successfully
+        # even if the email fails, and the user receives a warning instead of an error
         if not save_only:
-            # TODO Phase 3: Send email via SES
-            # For now, just indicate email would be sent
-            response_data['sent'] = []  # Would contain email addresses if sent
+            email_recipients = []
+            email_warning = None
+
+            # Build recipient list (filter out empty emails)
+            if client_email:
+                email_recipients.append(client_email)
+            if accountant_email:
+                email_recipients.append(accountant_email)
+
+            if email_recipients:
+                try:
+                    # Send invoice email with PDF attachment
+                    send_weekly_email(
+                        to_addresses=email_recipients,
+                        user_name=user_config.get('name', 'Contractor'),
+                        week_start=week['start'],
+                        week_end=week['end'],
+                        total_hours=invoice_metadata['totalHours'],
+                        total_pay=invoice_metadata['totalPay'],
+                        pdf_data=pdf_bytes,
+                        pdf_filename=f"{invoice_id}.pdf",
+                        from_email="noreply@goinvoi.com"
+                    )
+
+                    # Persist updated status to DynamoDB first, before updating response
+                    # This ensures the response status matches the database state
+                    try:
+                        invoice_metadata['status'] = 'sent'
+                        invoice_metadata['sentAt'] = datetime.now().isoformat()
+                        invoice_metadata['sentTo'] = email_recipients
+
+                        invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
+                        invoices_table.put_item(Item=invoice_metadata)
+
+                        # Only update response if database update succeeded
+                        response_data['sent'] = email_recipients
+                        response_data['status'] = 'sent'
+                    except ClientError as e:
+                        print(f"Failed to update invoice status after email send: {str(e)}")
+                        # Email was sent but status update failed
+                        # Keep status as 'draft' to match database state
+                        response_data['sent'] = []
+                        response_data['emailWarning'] = f"Email sent to {', '.join(email_recipients)} but status update failed. Invoice remains in draft status."
+
+                except Exception as e:
+                    # Email failed but invoice was saved successfully
+                    # Return success with warning rather than failing the entire operation
+                    print(f"Email send failed: {str(e)}")
+                    email_warning = f"Invoice saved but email failed: {str(e)}"
+                    response_data['sent'] = []
+                    response_data['emailWarning'] = email_warning
+            else:
+                # No recipients configured
+                response_data['sent'] = []
+                response_data['emailWarning'] = "No email recipients configured"
 
         return {
             'statusCode': 200,

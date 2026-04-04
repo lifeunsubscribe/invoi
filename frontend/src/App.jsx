@@ -1556,19 +1556,21 @@ function handleSubmitResponse(data, savedPath, emails, setNotification, setAlrea
 
   const dateStr = new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 
-  // Check for partial success: PDF saved but email failed
-  if (data.saved && data.emailError) {
+  // Check for partial success: PDF saved but email failed (Phase 3: emailWarning instead of emailError)
+  if ((data.saved || data.s3Key) && (data.emailError || data.emailWarning)) {
     setNotification({
-      saved: data.saved,
-      emailError: data.emailError
+      saved: data.saved || data.s3Key,
+      emailError: data.emailError || data.emailWarning,
+      warning: data.emailWarning  // Phase 3: separate warning field for yellow banner
     });
     setAlreadySaved(true);
     setSavedDate(dateStr);
-  } else if (data.saved || (data.sent && data.sent.length)) {
+  } else if (data.saved || data.s3Key || (data.sent && data.sent.length)) {
     // Full success - require at least one success indicator
     setNotification({
       sent: data.sent && data.sent.length ? data.sent : null,
-      saved: data.saved || savedPath
+      saved: data.saved || data.s3Key || savedPath,
+      success: data.sent && data.sent.length ? `Sent to: ${data.sent.join(', ')}` : null  // Phase 3: success message with recipients
     });
     setAlreadySaved(true);
     setSavedDate(dateStr);
@@ -1685,7 +1687,7 @@ function WeeklyPage({ config, onBack }) {
       }
 
       const data = await response.json();
-      setSavedInvoicePath(data.saved);
+      setSavedInvoicePath(data.saved || data.s3Key || null);
       setAlreadySaved(true);
 
       // Generate log PDF preview
@@ -1806,6 +1808,66 @@ function WeeklyPage({ config, onBack }) {
     } catch (error) {
       console.error('Send invoice only failed:', error);
       setNotification({ error: error.message || 'Unable to send.' });
+    } finally {
+      setSubmitting(false);
+      submitInProgressRef.current = false;
+    }
+  };
+
+  /**
+   * Phase 3: Save & Send - Saves invoice and sends email in one action
+   * Skips the log review step and directly sends the invoice to client and accountant
+   */
+  const doSaveAndSend = async () => {
+    if (submitInProgressRef.current) return;
+    submitInProgressRef.current = true;
+    setSubmitting(true);
+    setNotification(null);
+    setShowConfirm(false);
+
+    try {
+      const payload = {
+        hours,
+        clientEmail,
+        accountantEmail,
+        week: { start: week.start, end: week.end, invNum: week.invNum },
+        saveOnly: false  // Phase 3: send email after PDF generation
+      };
+
+      const response = await fetch(`${API_BASE}/api/submit/weekly`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Unable to save and send invoice.');
+      }
+
+      const data = await response.json();
+
+      // Show success notification with email recipients
+      if (data.sent && data.sent.length > 0) {
+        setNotification({
+          success: `Invoice sent to: ${data.sent.join(', ')}`
+        });
+      } else if (data.emailWarning) {
+        setNotification({
+          warning: data.emailWarning
+        });
+      } else {
+        setNotification({
+          success: 'Invoice saved successfully'
+        });
+      }
+
+      setAlreadySaved(true);
+      setSavedInvoicePath(data.saved || data.s3Key || null);
+
+    } catch (error) {
+      console.error('Save and send failed:', error);
+      setNotification({ error: error.message || 'Unable to save and send invoice.' });
     } finally {
       setSubmitting(false);
       submitInProgressRef.current = false;
@@ -1988,9 +2050,14 @@ function WeeklyPage({ config, onBack }) {
             {notification && <div style={{padding:"10px 16px 0"}}><NotifCard notification={notification} onDismiss={()=>setNotification(null)} accent={acc}/></div>}
             <div style={{padding:"10px 16px 14px"}}>
               {submitStep === 1 ? (<>
-                <button onClick={handleSubmit} disabled={submitting||previewing} style={{width:"100%",fontSize:16,fontWeight:700,padding:"12px 0",borderRadius:9,border:"none",background:`linear-gradient(135deg,${acc},${acc}bb)`,color:"white",cursor:(submitting||previewing)?"wait":"pointer",boxShadow:`0 3px 14px ${tint(acc,0.35)}`,opacity:(submitting||previewing)?0.7:1}}>
-                  {submitting ? "Saving..." : "Save & Continue"}
-                </button>
+                <div style={{display:"flex",gap:8,marginBottom:8}}>
+                  <button onClick={handleSubmit} disabled={submitting||previewing} style={{flex:1,fontSize:16,fontWeight:700,padding:"12px 0",borderRadius:9,border:"none",background:"white",color:acc,cursor:(submitting||previewing)?"wait":"pointer",border:`2px solid ${acc}`,opacity:(submitting||previewing)?0.7:1}}>
+                    {submitting ? "Saving..." : "Save"}
+                  </button>
+                  <button onClick={doSaveAndSend} disabled={submitting||previewing} style={{flex:1,fontSize:16,fontWeight:700,padding:"12px 0",borderRadius:9,border:"none",background:`linear-gradient(135deg,${acc},${acc}bb)`,color:"white",cursor:(submitting||previewing)?"wait":"pointer",boxShadow:`0 3px 14px ${tint(acc,0.35)}`,opacity:(submitting||previewing)?0.7:1}}>
+                    {submitting ? "Sending..." : "Save & Send"}
+                  </button>
+                </div>
                 <button onClick={doPreviewLogsOnly} disabled={submitting||previewing}
                   style={{width:"100%",fontSize:13,color:"#9a8070",background:"none",border:"none",cursor:(submitting||previewing)?"wait":"pointer",padding:"8px 0 0",textDecoration:"underline",textDecorationColor:"#d0c0b8"}}>
                   {previewing ? "Loading..." : "Continue Without Saving"}
@@ -2122,6 +2189,7 @@ function MonthlyPage({ config, onBack }) {
         weekData: weeksWithData.map(w => ({ label: w.label, hours: w.hours })),
         year: year,
         month: month + 1, // Backend expects 1-indexed month
+        send: true,  // Phase 3: send email after PDF generation
         accountantEmail: accountantEmail,
         signatureFont: signatureFont
       };
