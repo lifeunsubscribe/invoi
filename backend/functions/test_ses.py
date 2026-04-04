@@ -3,13 +3,17 @@ Test SES Email Sending
 
 Temporary endpoint for verifying SES configuration.
 Sends a test email to a specified address.
+Requires authentication via X-Test-Secret header.
 
 Usage:
     GET /api/test-ses?to=recipient@example.com
+    Headers:
+        X-Test-Secret: <secret value from sst secret set TestSesSecret>
 
 Response:
     200: { "message": "Test email sent", "messageId": "..." }
     400: { "error": "Missing 'to' parameter" }
+    401: { "error": "Authentication required. Provide X-Test-Secret header." }
     500: { "error": "Failed to send email: ..." }
 """
 
@@ -22,11 +26,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from services.mail_service import send_email
 from botocore.exceptions import ClientError
+from sst import Resource
 
 
 def handler(event, context):
     """
     Lambda handler for SES test endpoint.
+
+    Requires X-Test-Secret header matching TestSesSecret for authentication.
 
     Query params:
         to: recipient email address (required)
@@ -34,8 +41,24 @@ def handler(event, context):
     Returns:
         200: Test email sent successfully
         400: Missing required parameter
+        401: Authentication failed
         500: SES send failed
     """
+    # Validate authentication header
+    headers = event.get('headers') or {}
+    provided_secret = headers.get('x-test-secret') or headers.get('X-Test-Secret')
+    expected_secret = Resource.TestSesSecret.value
+
+    if not provided_secret or provided_secret != expected_secret:
+        return {
+            'statusCode': 401,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+            },
+            'body': json.dumps({'error': 'Authentication required. Provide X-Test-Secret header.'})
+        }
+
     # Extract recipient from query params
     params = event.get('queryStringParameters') or {}
     to_address = params.get('to')

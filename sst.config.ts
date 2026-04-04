@@ -144,15 +144,20 @@ export default $config({
     });
 
     // Phase 3: Test SES email sending (temporary endpoint for validation)
+    // Restricted to dev stage and requires TEST_SES_SECRET header for authentication
     if ($app.stage === "dev") {
+      const testSesSecret = new sst.Secret("TestSesSecret");
       api.route("GET /api/test-ses", {
         handler: "backend/functions/test_ses.handler",
         timeout: "10 seconds",
         memory: "256 MB",
+        link: [testSesSecret],
         permissions: [
           {
             actions: ["ses:SendEmail", "ses:SendRawEmail"],
-            resources: ["*"],
+            resources: [
+              $interpolate`arn:aws:ses:${aws.getRegionOutput().name}:${aws.getCallerIdentityOutput().accountId}:identity/${emailIdentity.email}`,
+            ],
           },
         ],
       });
