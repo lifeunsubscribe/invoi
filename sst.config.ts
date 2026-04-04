@@ -342,7 +342,7 @@ export default $config({
         },
         {
           id: "error_rate",
-          expression: "(errors / invocations) * 100",
+          expression: "IF(invocations > 0, (errors / invocations) * 100, 0)",
           label: "Error Rate (%)",
           returnData: true,
         },
@@ -391,7 +391,7 @@ export default $config({
         },
         {
           id: "error_rate",
-          expression: "(errors5xx / requests) * 100",
+          expression: "IF(requests > 0, (errors5xx / requests) * 100, 0)",
           label: "5xx Error Rate (%)",
           returnData: true,
         },
@@ -484,23 +484,26 @@ export default $config({
     });
 
     // Set log retention to 30 days for all Lambda function log groups
-    // This applies to all Lambda functions created by SST
-    // Note: SST creates log groups automatically with pattern /aws/lambda/<function-name>
-    // We'll set retention for the main Lambda functions in the API
+    // SST Ion creates Lambda functions with naming pattern based on the handler path
+    // For api.route() handlers, SST uses the handler file name (without extension) as the function name
+    // Pattern: /aws/lambda/<app-name>-<stage>-<handler-basename>
+    // Example: /aws/lambda/invoi-dev-hello (from backend/functions/hello.handler)
     const logRetentionDays = 30;
 
-    // Helper function to create log retention policy for a Lambda function
-    const setLogRetention = (functionName: string, logicalName: string) => {
+    // Helper function to set log retention for a Lambda function log group
+    // Uses skipDestroy to avoid conflicts with SST-managed log groups
+    // and retentionInDays to ensure 30-day retention regardless of when the group was created
+    const setLogRetention = (handlerBaseName: string, logicalName: string) => {
       return new aws.cloudwatch.LogGroup(`${logicalName}LogGroup`, {
-        name: $interpolate`/aws/lambda/${functionName}`,
+        name: $interpolate`/aws/lambda/${$app.name}-${$app.stage}-${handlerBaseName}`,
         retentionInDays: logRetentionDays,
+        skipDestroy: true, // Don't delete log group on destroy - let SST manage lifecycle
       });
     };
 
     // Set log retention for all API route handlers
-    // Note: SST generates function names like "invoi-<stage>-<route-name>"
-    // These will be created but may need adjustment based on actual deployed function names
-    const apiRoutes = [
+    // Handler base names are extracted from the handler paths (e.g., "backend/functions/hello.handler" -> "hello")
+    const handlerBaseNames = [
       "hello",
       "config",
       "scan_month",
@@ -515,13 +518,13 @@ export default $config({
       "logo",
     ];
 
-    apiRoutes.forEach((route) => {
-      setLogRetention($interpolate`${$app.name}-${$app.stage}-${route}`, `${route}Function`);
+    handlerBaseNames.forEach((baseName) => {
+      setLogRetention(baseName, `${baseName}Function`);
     });
 
     // Add test-ses function log retention for dev stage only
     if ($app.stage === "dev") {
-      setLogRetention($interpolate`${$app.name}-${$app.stage}-test_ses`, "testSesFunction");
+      setLogRetention("test_ses", "testSesFunction");
     }
 
     // Static site (React frontend) - defined after API/Cognito to pass correct env vars
