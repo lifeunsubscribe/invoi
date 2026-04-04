@@ -256,7 +256,8 @@ def handler(event, context):
             'totalHours': invoice_metadata['totalHours'],
             'totalPay': invoice_metadata['totalPay'],
             'status': invoice_metadata['status'],
-            'createdAt': invoice_metadata['createdAt']
+            'createdAt': invoice_metadata['createdAt'],
+            'sent': []  # Initialize sent field - will be populated if email is sent
         }
 
         # Phase 3: Send email via SES if not save_only mode
