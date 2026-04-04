@@ -11,6 +11,9 @@ from services.db_service import get_user
 from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
 from botocore.exceptions import ClientError
 
+# Re-export for test imports
+__all__ = ['handler', '_calculate_due_date']
+
 
 def handler(event, context):
     """
@@ -209,7 +212,8 @@ def handler(event, context):
             active_client=active_client,
             client_email=client_email,
             accountant_email=accountant_email,
-            save_only=save_only
+            save_only=save_only,
+            invoice_number=preview_invoice_number
         )
 
         # Upload PDF to S3 at users/{userId}/weekly/{invoiceId}.pdf
@@ -290,19 +294,29 @@ def handler(event, context):
 
 
 def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, active_client,
-                                         client_email, accountant_email, save_only):
+                                         client_email, accountant_email, save_only, invoice_number):
     """
     Atomically increment invoice number in user config and create invoice record.
 
     Uses DynamoDB TransactWriteItems to guarantee no duplicate invoice numbers
     even under concurrent requests.
 
+    Args:
+        user_id: str - User ID
+        user_config: dict - User configuration
+        hours: dict - Daily hours data
+        week: dict - Week metadata (start, end, invNum)
+        active_client: dict - Active client data
+        client_email: str - Client email address
+        accountant_email: str - Accountant email address
+        save_only: bool - Whether to save as draft only
+        invoice_number: str - Pre-generated invoice number (from preview)
+
     Returns:
         tuple: (invoice_number: str, invoice_metadata: dict)
     """
-    # Generate invoice number with current counter value
-    # Note: format_invoice_number reads nextNum from config internally
-    invoice_number = format_invoice_number(user_config, 'weekly')
+    # Use the pre-generated invoice number passed from caller
+    # This avoids regenerating the number which would cause gaps if the transaction fails
 
     # Calculate totals
     total_hours = sum(float(hours.get(day, 0)) for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
