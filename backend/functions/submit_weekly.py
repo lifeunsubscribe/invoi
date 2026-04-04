@@ -277,6 +277,13 @@ def handler(event, context):
             'headers': headers,
             'body': json.dumps({'error': 'Invalid JSON in request body'})
         }
+    except ValueError as e:
+        print(f"Validation error in POST /api/submit/weekly: {str(e)}")
+        return {
+            'statusCode': 400,
+            'headers': headers,
+            'body': json.dumps({'error': str(e)})
+        }
     except ClientError as e:
         print(f"AWS error in POST /api/submit/weekly: {str(e)}")
         return {
