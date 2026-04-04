@@ -320,6 +320,81 @@ class TestZipExport:
         assert 'invoices-' in call_kwargs['ContentDisposition']
         assert '.zip' in call_kwargs['ContentDisposition']
 
+    def test_zip_export_partial_success_with_warnings(self):
+        """ZIP export should return warnings when some PDFs fail to fetch"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'invoiceIds': ['INV-001', 'INV-002'],
+                'format': 'zip'
+            })
+        }
+
+        mock_invoice_1 = {
+            'userId': 'user-123',
+            'invoiceId': 'INV-001',
+            'pdfKey': 'users/user-123/weekly/INV-001.pdf',
+            'logPdfKey': 'users/user-123/logs/LOG-001.pdf'
+        }
+
+        mock_invoice_2 = {
+            'userId': 'user-123',
+            'invoiceId': 'INV-002',
+            'pdfKey': 'users/user-123/weekly/INV-002.pdf',
+            'logPdfKey': 'users/user-123/logs/LOG-002.pdf'
+        }
+
+        mock_pdf_data = b'%PDF-1.4 mock pdf'
+
+        # Simulate partial failure: INV-001 PDF succeeds, but its log fails
+        # INV-002 PDF fails, but its log succeeds
+        def mock_get_object(Bucket, Key):
+            if Key == 'users/user-123/weekly/INV-001.pdf':
+                return {'Body': MagicMock(read=lambda: mock_pdf_data)}
+            elif Key == 'users/user-123/logs/LOG-001.pdf':
+                raise ClientError(
+                    {'Error': {'Code': 'NoSuchKey', 'Message': 'Key not found'}},
+                    'GetObject'
+                )
+            elif Key == 'users/user-123/weekly/INV-002.pdf':
+                raise ClientError(
+                    {'Error': {'Code': 'NoSuchKey', 'Message': 'Key not found'}},
+                    'GetObject'
+                )
+            elif Key == 'users/user-123/logs/LOG-002.pdf':
+                return {'Body': MagicMock(read=lambda: mock_pdf_data)}
+            return {'Body': MagicMock(read=lambda: mock_pdf_data)}
+
+        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
+            with patch('functions.export.get_invoice', side_effect=[mock_invoice_1, mock_invoice_2]):
+                with patch('functions.export.s3_client.get_object', side_effect=mock_get_object):
+                    with patch('functions.export.s3_client.put_object'):
+                        with patch('functions.export.s3_client.generate_presigned_url', return_value='https://url'):
+                            response = handler(event, {})
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+
+        # Should have 2 successful PDFs (INV-001.pdf and LOG-002.pdf)
+        assert body['pdfCount'] == 2
+        assert body['invoiceCount'] == 2
+
+        # Should have warnings about the 2 failed PDFs
+        assert 'warnings' in body
+        assert 'failedPdfs' in body['warnings']
+        assert len(body['warnings']['failedPdfs']) == 2
+        assert 'Log PDF for INV-001' in body['warnings']['failedPdfs']
+        assert 'Invoice PDF for INV-002' in body['warnings']['failedPdfs']
+        assert '2 PDF(s) could not be included' in body['warnings']['message']
+
 
 class TestAuthAndValidation:
     """Tests for authentication and request validation"""
