@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { getAuthToken } from "./auth.jsx";
+import { getAuthToken, isAuthenticated } from "./auth.jsx";
 import HistoryPage from "./components/HistoryPage.jsx";
+import LandingPage from "./components/LandingPage.jsx";
 
 // API configuration - VITE_API_URL is injected by SST during deployment
 // For local development with `npx sst dev`, the URL is automatically provided
@@ -863,8 +864,8 @@ function NotifCard({ notification, onDismiss, accent }) {
   );
 }
 
-// ── LANDING ───────────────────────────────────────────────────────────────
-function LandingPage({ config, onNav }) {
+// ── DASHBOARD (authenticated user menu) ───────────────────────────────────
+function DashboardPage({ config, onNav }) {
   const acc  = config.accent;
   const week = getWeekRange(0);
   const now  = new Date();
@@ -3663,6 +3664,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [configError, setConfigError] = useState(null);
   const [helloMessage, setHelloMessage] = useState(null); // TODO: REMOVE AFTER PHASE 0
+  const [authChecked, setAuthChecked] = useState(false);
 
   // TODO: REMOVE AFTER PHASE 0 - Temporary test code for end-to-end verification only
   // [Phase 0] Test end-to-end browser-to-Lambda flow
@@ -3681,9 +3683,24 @@ export default function App() {
     }
   }, []);
 
-  // Fetch config on app mount
+  // [Phase 5] Check authentication status on mount
+  // This determines whether to show the marketing landing page (unauthenticated)
+  // or the dashboard (authenticated). Auth is currently stubbed - real OAuth
+  // will be implemented in Phase 1 with Cognito.
+  useEffect(() => {
+    const authenticated = isAuthenticated();
+    setAuthChecked(true);
+    if (!authenticated) {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch config on app mount (only for authenticated users)
   // [Phase 1] API calls now include Authorization header from auth.jsx
   useEffect(() => {
+    if (!authChecked) return;
+    if (!isAuthenticated()) return;
+
     const abortController = new AbortController();
     const token = getAuthToken();
     fetch(`${API_BASE}/api/config`, {
@@ -3705,14 +3722,21 @@ export default function App() {
         }
       });
     return () => abortController.abort();
-  }, []);
+  }, [authChecked]);
 
   const handleNav = (dest) => {
     if (dest==="profile-folder") { setScrollToFolder(true); setPage("profile"); }
     else { setScrollToFolder(false); setPage(dest); }
   };
 
-  // Show loading state while fetching config
+  const handleSignIn = () => {
+    // TODO [Phase 1]: Implement real OAuth sign-in flow with Cognito
+    // For now, this is a placeholder that will be replaced with actual OAuth
+    console.log('Sign in clicked - OAuth flow will be implemented in Phase 1');
+    alert('Sign in with Google will be enabled once OAuth is configured. Check back soon!');
+  };
+
+  // Show loading state while checking auth and fetching config
   if (loading) {
     return (
       <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f9f3ee",flexDirection:"column",gap:16}}>
@@ -3720,6 +3744,14 @@ export default function App() {
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:"#2c1810"}}>Loading your profile...</div>
       </div>
     );
+  }
+
+  // [Phase 5] Show marketing landing page for unauthenticated users
+  // This is the public-facing page at goinvoi.com root that explains the product
+  // and provides "Sign in with Google" CTAs. Once OAuth is configured, users will
+  // authenticate and be redirected to the dashboard (DashboardPage below).
+  if (!isAuthenticated()) {
+    return <LandingPage onSignIn={handleSignIn} />;
   }
 
   // Show error banner if config fetch failed (but continue with defaults)
@@ -3748,5 +3780,5 @@ export default function App() {
   if (page==="monthly") return <>{ErrorBanner}{HelloBanner}<MonthlyPage config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="history") return <>{ErrorBanner}{HelloBanner}<HistoryPage config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="profile") return <>{ErrorBanner}{HelloBanner}<ProfilePage config={config} onSave={setConfig} onBack={()=>setPage("menu")} scrollToFolder={scrollToFolder}/></>;
-  return <>{ErrorBanner}{HelloBanner}<LandingPage config={config} onNav={handleNav}/></>;
+  return <>{ErrorBanner}{HelloBanner}<DashboardPage config={config} onNav={handleNav}/></>;
 }

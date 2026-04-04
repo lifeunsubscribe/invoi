@@ -41,6 +41,16 @@ export function getAuthToken() {
 export function isAuthenticated() {
   // TODO [Phase 1]: Check for valid Cognito/Auth0 session
   // Real implementation will check token expiry, refresh if needed
+
+  // [Phase 5] Temporary: Check for ?authenticated=false in URL to demo landing page
+  // This allows testing the unauthenticated landing page without breaking existing flows
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('authenticated') === 'false') {
+      return false;
+    }
+  }
+
   return true; // Stub: assume always authenticated for Phase 1
 }
 
