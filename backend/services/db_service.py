@@ -207,3 +207,81 @@ def query_invoices(user_id, filters=None):
 
     except ClientError as e:
         raise
+
+
+def update_invoice_status(user_id, invoice_id, status, paid_at=None):
+    """
+    Update the status of an invoice.
+
+    Args:
+        user_id (str): The userId (partition key)
+        invoice_id (str): The invoiceId (sort key)
+        status (str): The new status (draft/sent/paid/overdue)
+        paid_at (str, optional): ISO timestamp for when invoice was paid (required when status='paid')
+
+    Returns:
+        dict: Updated invoice record
+
+    Raises:
+        ValueError: If status is invalid or invoice not found
+        ClientError: If DynamoDB operation fails
+    """
+    from datetime import datetime, timezone
+
+    # Validate status value
+    valid_statuses = ['draft', 'sent', 'paid', 'overdue']
+    if status not in valid_statuses:
+        raise ValueError(f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}")
+
+    try:
+        table = get_invoices_table()
+
+        # Always update the updatedAt timestamp
+        updated_at = datetime.now(timezone.utc).isoformat()
+
+        # Build update expression based on status
+        if status == 'paid' and paid_at:
+            # When marking as paid, also record the payment timestamp
+            update_expression = 'SET #status = :status, #paidAt = :paidAt, #updatedAt = :updatedAt'
+            expression_attribute_values = {
+                ':status': status,
+                ':paidAt': paid_at,
+                ':updatedAt': updated_at
+            }
+            expression_attribute_names = {
+                '#status': 'status',
+                '#paidAt': 'paidAt',
+                '#updatedAt': 'updatedAt'
+            }
+        else:
+            # For other status changes, update status and updatedAt
+            update_expression = 'SET #status = :status, #updatedAt = :updatedAt'
+            expression_attribute_values = {
+                ':status': status,
+                ':updatedAt': updated_at
+            }
+            expression_attribute_names = {
+                '#status': 'status',
+                '#updatedAt': 'updatedAt'
+            }
+
+        # Update the invoice with condition that it exists
+        response = table.update_item(
+            Key={
+                'userId': user_id,
+                'invoiceId': invoice_id
+            },
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values,
+            ExpressionAttributeNames=expression_attribute_names,
+            ConditionExpression='attribute_exists(userId) AND attribute_exists(invoiceId)',
+            ReturnValues='ALL_NEW'
+        )
+
+        return response.get('Attributes')
+
+    except ClientError as e:
+        # Handle case where invoice doesn't exist
+        if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+            raise ValueError(f"Invoice {invoice_id} not found for user {user_id}")
+        raise
