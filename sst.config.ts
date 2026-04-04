@@ -114,7 +114,7 @@ export default $config({
       },
       transform: {
         // Configure API Gateway throttling to prevent abuse
-        // Rate limit: 100 requests/second per user
+        // Rate limit: 100 requests/second (aggregate across all users at stage level)
         // Burst limit: 200 requests (handles short traffic spikes)
         // When exceeded, API Gateway returns 429 Too Many Requests
         api: (args) => {
