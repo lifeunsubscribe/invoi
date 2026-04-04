@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { getAuthToken, isAuthenticated } from "./auth.jsx";
 import HistoryPage from "./components/HistoryPage.jsx";
 import LandingPage from "./components/LandingPage.jsx";
+import ImportPage from "./components/ImportPage.jsx";
 
 // API configuration - VITE_API_URL is injected by SST during deployment
 // For local development with `npx sst dev`, the URL is automatically provided
@@ -876,6 +877,7 @@ function DashboardPage({ config, onNav }) {
     { id:"weekly",  emoji:"📄", label:"Weekly Invoice",    desc:`Week of ${week.start}`,               primary:false },
     { id:"monthly", emoji:"📊", label:"Monthly Report",    desc:monthName,                              primary:false },
     { id:"history", emoji:"📚", label:"History",           desc:"View Past Invoices",                   primary:false },
+    { id:"import",  emoji:"📥", label:"Import",            desc:"Import Historical Invoices",           primary:false },
     { id:"profile", emoji:"👤", label:"Edit Profile",      desc:"Invoice & Custom Settings",            primary:false },
   ];
   return (
@@ -3778,6 +3780,7 @@ export default function App() {
   if (page==="weekly")  return <>{ErrorBanner}{HelloBanner}<WeeklyPage  config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="monthly") return <>{ErrorBanner}{HelloBanner}<MonthlyPage config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="history") return <>{ErrorBanner}{HelloBanner}<HistoryPage config={config} onBack={()=>setPage("menu")}/></>;
+  if (page==="import") return <>{ErrorBanner}{HelloBanner}<ImportPage config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="profile") return <>{ErrorBanner}{HelloBanner}<ProfilePage config={config} onSave={setConfig} onBack={()=>setPage("menu")} scrollToFolder={scrollToFolder}/></>;
   return <>{ErrorBanner}{HelloBanner}<DashboardPage config={config} onNav={handleNav}/></>;
 }
