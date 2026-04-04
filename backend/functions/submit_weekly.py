@@ -463,9 +463,11 @@ def _populate_hours_from_default_shift(default_shift):
         start_hour, start_min = map(int, start_time.split(':'))
         end_hour, end_min = map(int, end_time.split(':'))
         hours_per_shift = (end_hour * 60 + end_min - start_hour * 60 - start_min) / 60.0
-    except (ValueError, AttributeError):
-        # Invalid time format, default to 8 hours
-        hours_per_shift = 8.0
+    except (ValueError, AttributeError) as e:
+        # Invalid time format in default shift configuration
+        error_msg = f"Invalid time format in default shift: start='{start_time}', end='{end_time}'. Expected format: HH:MM"
+        print(f"ERROR: {error_msg} - {str(e)}")
+        raise ValueError(error_msg)
 
     # Map abbreviated day names to full names
     day_mapping = {
