@@ -412,6 +412,447 @@ class TestPatchInvoiceStatus:
         assert 'json' in body['error'].lower()
 
 
+class TestGetInvoicesList:
+    """Tests for GET /api/invoices endpoint"""
+
+    def test_get_list_returns_all_user_invoices(self):
+        """GET /api/invoices should return all invoices for authenticated user"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': None
+        }
+
+        mock_invoices = [
+            {'userId': 'user-123', 'invoiceId': 'INV-20260324', 'status': 'sent', 'totalPay': 1120.00},
+            {'userId': 'user-123', 'invoiceId': 'INV-20260331', 'status': 'paid', 'totalPay': 1200.00},
+        ]
+
+        with patch('functions.invoices.query_invoices', return_value=mock_invoices):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert 'invoices' in body
+        assert 'pagination' in body
+        assert len(body['invoices']) == 2
+        assert body['pagination']['total'] == 2
+
+    def test_get_list_filters_by_single_status(self):
+        """GET /api/invoices?status=sent should filter by status"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': {'status': 'sent'}
+        }
+
+        mock_invoices = [
+            {'userId': 'user-123', 'invoiceId': 'INV-20260324', 'status': 'sent'},
+        ]
+
+        with patch('functions.invoices.query_invoices', return_value=mock_invoices) as mock_query:
+            response = handler(event, {})
+
+        # Verify query_invoices was called with status filter
+        call_args = mock_query.call_args
+        assert call_args[0][0] == 'user-123'
+        assert call_args[0][1]['status'] == 'sent'
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert len(body['invoices']) == 1
+        assert body['invoices'][0]['status'] == 'sent'
+
+    def test_get_list_filters_by_multiple_statuses(self):
+        """GET /api/invoices?status=sent,paid should filter by multiple statuses"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': {'status': 'sent,paid'}
+        }
+
+        # Mock all invoices (before application-level filtering)
+        mock_all_invoices = [
+            {'userId': 'user-123', 'invoiceId': 'INV-20260324', 'status': 'sent'},
+            {'userId': 'user-123', 'invoiceId': 'INV-20260331', 'status': 'paid'},
+            {'userId': 'user-123', 'invoiceId': 'INV-20260307', 'status': 'draft'},
+        ]
+
+        with patch('functions.invoices.query_invoices', return_value=mock_all_invoices):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        # Should only return sent and paid, not draft
+        assert len(body['invoices']) == 2
+        statuses = {inv['status'] for inv in body['invoices']}
+        assert statuses == {'sent', 'paid'}
+
+    def test_get_list_filters_by_client_id(self):
+        """GET /api/invoices?clientId=client_abc should filter by client"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': {'clientId': 'client_abc'}
+        }
+
+        mock_invoices = [
+            {'userId': 'user-123', 'invoiceId': 'INV-20260324', 'clientId': 'client_abc'},
+        ]
+
+        with patch('functions.invoices.query_invoices', return_value=mock_invoices) as mock_query:
+            response = handler(event, {})
+
+        # Verify query_invoices was called with clientId filter
+        call_args = mock_query.call_args
+        assert call_args[0][1]['clientId'] == 'client_abc'
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert len(body['invoices']) == 1
+
+    def test_get_list_filters_by_date_range(self):
+        """GET /api/invoices?start=2026-03-01&end=2026-03-31 should filter by date range"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': {
+                'start': '2026-03-01',
+                'end': '2026-03-31'
+            }
+        }
+
+        mock_invoices = [
+            {'userId': 'user-123', 'invoiceId': 'INV-20260324'},
+        ]
+
+        with patch('functions.invoices.query_invoices', return_value=mock_invoices) as mock_query:
+            response = handler(event, {})
+
+        # Verify date range was converted to invoiceId range
+        call_args = mock_query.call_args
+        filters = call_args[0][1]
+        assert filters['invoiceId_start'] == 'INV-20260301'
+        assert filters['invoiceId_end'] == 'INV-20260331'
+
+        assert response['statusCode'] == 200
+
+    def test_get_list_invalid_start_date_returns_400(self):
+        """GET /api/invoices?start=invalid should return 400"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': {'start': 'invalid-date'}
+        }
+
+        response = handler(event, {})
+
+        assert response['statusCode'] == 400
+        body = json.loads(response['body'])
+        assert 'error' in body
+        assert 'date format' in body['error'].lower()
+
+    def test_get_list_pagination_with_limit_and_offset(self):
+        """GET /api/invoices?limit=2&offset=1 should paginate results"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': {'limit': '2', 'offset': '1'}
+        }
+
+        mock_invoices = [
+            {'invoiceId': 'INV-001'},
+            {'invoiceId': 'INV-002'},
+            {'invoiceId': 'INV-003'},
+            {'invoiceId': 'INV-004'},
+        ]
+
+        with patch('functions.invoices.query_invoices', return_value=mock_invoices):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        # Should return 2 items starting from index 1
+        assert len(body['invoices']) == 2
+        assert body['invoices'][0]['invoiceId'] == 'INV-002'
+        assert body['invoices'][1]['invoiceId'] == 'INV-003'
+        assert body['pagination']['total'] == 4
+        assert body['pagination']['limit'] == 2
+        assert body['pagination']['offset'] == 1
+        assert body['pagination']['hasMore'] is True
+
+    def test_get_list_pagination_defaults(self):
+        """GET /api/invoices without pagination params should use defaults"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': None
+        }
+
+        mock_invoices = [{'invoiceId': f'INV-{i:03d}'} for i in range(1, 51)]
+
+        with patch('functions.invoices.query_invoices', return_value=mock_invoices):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        # Default limit is 100, offset is 0
+        assert body['pagination']['limit'] == 100
+        assert body['pagination']['offset'] == 0
+        assert body['pagination']['total'] == 50
+
+    def test_get_list_invalid_limit_returns_400(self):
+        """GET /api/invoices?limit=5000 should return 400 (exceeds max)"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': {'limit': '5000'}
+        }
+
+        response = handler(event, {})
+
+        assert response['statusCode'] == 400
+        body = json.loads(response['body'])
+        assert 'error' in body
+        assert 'limit' in body['error'].lower()
+
+    def test_get_list_without_auth_returns_401(self):
+        """GET /api/invoices without Authorization should return 401"""
+        event = {
+            'requestContext': {'http': {'method': 'GET'}},
+            'headers': {},
+            'queryStringParameters': None
+        }
+
+        response = handler(event, {})
+
+        assert response['statusCode'] == 401
+        body = json.loads(response['body'])
+        assert 'error' in body
+        assert 'authorization' in body['error'].lower()
+
+    def test_get_list_handles_dynamodb_error(self):
+        """GET /api/invoices should return 500 when DynamoDB fails"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': None
+        }
+
+        mock_error = ClientError(
+            {'Error': {'Code': 'ServiceUnavailable', 'Message': 'Service unavailable'}},
+            'Query'
+        )
+
+        with patch('functions.invoices.query_invoices', side_effect=mock_error):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 500
+        body = json.loads(response['body'])
+        assert 'error' in body
+
+
+class TestGetSingleInvoice:
+    """Tests for GET /api/invoices/{id} endpoint"""
+
+    def test_get_single_invoice_returns_full_metadata(self):
+        """GET /api/invoices/{id} should return full invoice metadata"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'pathParameters': {'id': 'INV-20260324'}
+        }
+
+        mock_invoice = {
+            'userId': 'user-123',
+            'invoiceId': 'INV-20260324',
+            'status': 'sent',
+            'totalPay': 1120.00,
+            'clientId': 'client_abc',
+            'weekStart': '2026-03-24',
+            'weekEnd': '2026-03-30'
+        }
+
+        with patch('functions.invoices.get_invoice', return_value=mock_invoice):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['invoiceId'] == 'INV-20260324'
+        assert body['status'] == 'sent'
+        assert body['totalPay'] == 1120.00
+
+    def test_get_single_invoice_not_found_returns_404(self):
+        """GET /api/invoices/{id} for non-existent invoice should return 404"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'pathParameters': {'id': 'INV-99999999'}
+        }
+
+        with patch('functions.invoices.get_invoice', return_value=None):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 404
+        body = json.loads(response['body'])
+        assert 'error' in body
+        assert 'not found' in body['error'].lower()
+
+    def test_get_single_invoice_other_user_returns_403(self):
+        """GET /api/invoices/{id} for another user's invoice should return 403"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'pathParameters': {'id': 'INV-20260324'}
+        }
+
+        # Mock invoice belonging to different user
+        mock_invoice = {
+            'userId': 'user-456',  # Different user
+            'invoiceId': 'INV-20260324'
+        }
+
+        with patch('functions.invoices.get_invoice', return_value=mock_invoice):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 403
+        body = json.loads(response['body'])
+        assert 'error' in body
+        assert 'unauthorized' in body['error'].lower()
+
+    def test_get_single_invoice_without_auth_returns_401(self):
+        """GET /api/invoices/{id} without Authorization should return 401"""
+        event = {
+            'requestContext': {'http': {'method': 'GET'}},
+            'headers': {},
+            'pathParameters': {'id': 'INV-20260324'}
+        }
+
+        response = handler(event, {})
+
+        assert response['statusCode'] == 401
+        body = json.loads(response['body'])
+        assert 'error' in body
+
+    def test_get_single_invoice_handles_dynamodb_error(self):
+        """GET /api/invoices/{id} should return 500 when DynamoDB fails"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'pathParameters': {'id': 'INV-20260324'}
+        }
+
+        mock_error = ClientError(
+            {'Error': {'Code': 'ServiceUnavailable', 'Message': 'Service unavailable'}},
+            'GetItem'
+        )
+
+        with patch('functions.invoices.get_invoice', side_effect=mock_error):
+            response = handler(event, {})
+
+        assert response['statusCode'] == 500
+        body = json.loads(response['body'])
+        assert 'error' in body
+
+
 class TestCORS:
     """Tests for CORS handling"""
 
@@ -430,4 +871,5 @@ class TestCORS:
         assert 'Access-Control-Allow-Origin' in response['headers']
         assert 'Access-Control-Allow-Methods' in response['headers']
         assert 'Access-Control-Allow-Headers' in response['headers']
+        assert 'GET' in response['headers']['Access-Control-Allow-Methods']
         assert 'PATCH' in response['headers']['Access-Control-Allow-Methods']
