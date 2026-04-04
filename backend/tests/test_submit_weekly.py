@@ -597,3 +597,96 @@ class TestSubmitWeekly:
         assert response['statusCode'] == 500
         body = json.loads(response['body'])
         assert 'error' in body
+
+    def test_submit_weekly_email_failure_returns_warning(self):
+        """POST with email failure should return success with warning"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'hours': {
+                    'Monday': 8,
+                    'Tuesday': 8,
+                    'Wednesday': 8,
+                    'Thursday': 8,
+                    'Friday': 8,
+                    'Saturday': 0,
+                    'Sunday': 0
+                },
+                'week': {
+                    'start': '2026-03-24',
+                    'end': '2026-03-30',
+                    'invNum': 'INV-20260324'
+                },
+                'clientEmail': 'client@example.com',
+                'accountantEmail': 'accountant@example.com',
+                'saveOnly': False  # Phase 3: send email
+            })
+        }
+
+        # Mock user config with all required fields
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'address': '123 Main St',
+            'personalEmail': 'test@example.com',
+            'rate': 28.00,
+            'template': 'morning-light',
+            'signatureFont': 'Dancing Script',
+            'paymentTerms': 'receipt',
+            'taxEnabled': False,
+            'invoiceNumberConfig': {
+                'prefix': 'INV',
+                'includeYear': False,
+                'separator': '-',
+                'padding': 3,
+                'nextNum': 1
+            },
+            'activeClientId': 'client-1',
+            'clients': [
+                {
+                    'id': 'client-1',
+                    'name': 'Test Client',
+                    'email': 'client@example.com'
+                }
+            ]
+        }
+
+        # Mock PDF generation returning bytes
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_weekly.get_user', return_value=mock_user):
+                with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
+                    with patch('functions.submit_weekly.save_pdf_to_s3'):
+                        with patch('functions.submit_weekly.send_weekly_email', side_effect=Exception('SES error')):
+                            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                                with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                    # Mock DynamoDB client for TransactWriteItems
+                                    mock_dynamodb_client = MagicMock()
+                                    mock_boto_client.return_value = mock_dynamodb_client
+
+                                    # Mock DynamoDB resource for put_item
+                                    mock_table = MagicMock()
+                                    mock_boto_resource.return_value.Table.return_value = mock_table
+
+                                    response = handler(event, {})
+
+        # Should return 200 with warning, not error
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert 'emailWarning' in body
+        assert 'SES error' in body['emailWarning']
+        assert body['sent'] == []
+        assert body['status'] == 'draft'  # Status should remain draft since email failed

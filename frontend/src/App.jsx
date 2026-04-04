@@ -1687,7 +1687,7 @@ function WeeklyPage({ config, onBack }) {
       }
 
       const data = await response.json();
-      setSavedInvoicePath(data.saved);
+      setSavedInvoicePath(data.saved || data.s3Key || null);
       setAlreadySaved(true);
 
       // Generate log PDF preview
@@ -1863,7 +1863,7 @@ function WeeklyPage({ config, onBack }) {
       }
 
       setAlreadySaved(true);
-      setSavedInvoicePath(data.saved);
+      setSavedInvoicePath(data.saved || data.s3Key || null);
 
     } catch (error) {
       console.error('Save and send failed:', error);
