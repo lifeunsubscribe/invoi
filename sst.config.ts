@@ -109,6 +109,12 @@ export default $config({
       link: [usersTable],
     });
 
+    // Phase 2: Scan month for existing invoices
+    api.route("GET /api/scan-month", {
+      handler: "backend/functions/scan_month.handler",
+      link: [invoicesTable],
+    });
+
     // Phase 2: Test ReportLab layer (temporary endpoint for validation)
     api.route("GET /api/test-reportlab", {
       handler: "backend/functions/test_reportlab.handler",
