@@ -105,9 +105,6 @@ export default function CalendarView({ invoices, config, onInvoiceClick }) {
     // Number of days in the month
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    // Number of days in previous month (for leading cells)
-    const daysInPrevMonth = new Date(year, month, 0).getDate();
-
     // Generate 6 weeks (42 cells) to accommodate any month layout
     const cells = [];
     let cellDate = new Date(year, month, 1);
