@@ -171,6 +171,14 @@ export default $config({
       link: [invoicesTable],
     });
 
+    // Phase 4: Get signed S3 URL for PDF download
+    api.route("GET /api/pdf/{id}", {
+      handler: "backend/functions/pdf.handler",
+      link: [invoicesTable, bucket],
+      timeout: "10 seconds",
+      memory: "256 MB",
+    });
+
     // Phase 3: Test SES email sending (temporary endpoint for validation)
     // Restricted to dev stage and requires TEST_SES_SECRET header for authentication
     if ($app.stage === "dev") {

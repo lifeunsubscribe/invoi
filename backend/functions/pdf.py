@@ -1,13 +1,183 @@
 import json
+import sys
+import os
+import boto3
+from botocore.exceptions import ClientError
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from services.db_service import get_invoice
+
+# Initialize S3 client
+s3_client = boto3.client('s3')
 
 
 def handler(event, context):
     """
     Lambda handler for GET /api/pdf/{invoiceId} — return signed S3 URL for PDF download.
-    TODO: Implement in Phase 2.
+
+    Returns:
+        200: Signed S3 URL (valid for 15 minutes)
+        401: Missing or invalid authorization
+        403: Invoice not owned by authenticated user
+        404: Invoice not found or PDF not available
+        500: Server error
     """
-    return {
-        'statusCode': 501,
-        'headers': {'Content-Type': 'application/json'},
-        'body': json.dumps({'error': 'Not yet implemented'})
+    # CORS headers for all responses
+    headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }
+
+    try:
+        # Extract HTTP method (supports both API Gateway v1 and v2 formats)
+        http_method = event.get('requestContext', {}).get('http', {}).get('method') or event.get('httpMethod', 'GET')
+
+        # Handle CORS preflight requests before auth check
+        if http_method == 'OPTIONS':
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': ''
+            }
+
+        # Extract userId from JWT claims
+        auth_header = event.get('headers', {}).get('authorization') or event.get('headers', {}).get('Authorization')
+
+        if not auth_header:
+            return {
+                'statusCode': 401,
+                'headers': headers,
+                'body': json.dumps({'error': 'Missing Authorization header'})
+            }
+
+        user_id = _extract_user_id_from_token(event)
+
+        if not user_id:
+            return {
+                'statusCode': 401,
+                'headers': headers,
+                'body': json.dumps({'error': 'Invalid or expired token'})
+            }
+
+        # Extract invoice ID from path parameters
+        path_params = event.get('pathParameters', {})
+        invoice_id = path_params.get('id') if path_params else None
+
+        if not invoice_id:
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'error': 'Invoice ID is required in path'})
+            }
+
+        # Retrieve invoice from DynamoDB
+        invoice = get_invoice(user_id, invoice_id)
+
+        if not invoice:
+            return {
+                'statusCode': 404,
+                'headers': headers,
+                'body': json.dumps({'error': f'Invoice {invoice_id} not found'})
+            }
+
+        # Verify invoice ownership (defense-in-depth authorization)
+        if invoice.get('userId') != user_id:
+            return {
+                'statusCode': 403,
+                'headers': headers,
+                'body': json.dumps({'error': 'Unauthorized: invoice does not belong to user'})
+            }
+
+        # Extract PDF S3 key from invoice record
+        pdf_key = invoice.get('pdfKey')
+
+        if not pdf_key:
+            return {
+                'statusCode': 404,
+                'headers': headers,
+                'body': json.dumps({'error': 'PDF not available for this invoice'})
+            }
+
+        # Get S3 bucket name from environment (provided by SST link)
+        bucket_name = os.environ.get('InvoiStorage')
+
+        if not bucket_name:
+            print("Error: InvoiStorage bucket name not found in environment")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Storage configuration error'})
+            }
+
+        # Generate signed S3 URL with 15-minute expiration
+        try:
+            signed_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': bucket_name,
+                    'Key': pdf_key
+                },
+                ExpiresIn=900  # 15 minutes in seconds
+            )
+
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'invoiceId': invoice_id,
+                    'pdfUrl': signed_url,
+                    'expiresIn': 900
+                })
+            }
+
+        except ClientError as e:
+            print(f"S3 error generating presigned URL: {str(e)}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Failed to generate download URL'})
+            }
+
+    except ClientError as e:
+        print(f"DynamoDB error in GET /api/pdf/{{id}}: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': 'Failed to retrieve invoice'})
+        }
+    except Exception as e:
+        print(f"Unhandled error in pdf handler: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': 'Internal server error'})
+        }
+
+
+def _extract_user_id_from_token(event):
+    """
+    Extract userId from JWT token claims.
+
+    Returns None if no valid JWT claims are present.
+    """
+    # Check for Cognito authorizer claims (API Gateway v2 with JWT authorizer)
+    try:
+        claims = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {})
+        if claims and 'sub' in claims:
+            return claims.get('sub')
+    except (KeyError, AttributeError):
+        pass
+
+    # Fallback: check for lambda authorizer format (API Gateway v1)
+    try:
+        authorizer = event.get('requestContext', {}).get('authorizer', {})
+        if authorizer and 'claims' in authorizer and 'sub' in authorizer['claims']:
+            return authorizer['claims'].get('sub')
+    except (KeyError, AttributeError):
+        pass
+
+    return None
