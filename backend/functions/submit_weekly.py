@@ -314,21 +314,25 @@ def handler(event, context):
                         from_email="noreply@goinvoi.com"
                     )
 
-                    # Update invoice status to 'sent' and record email metadata
-                    invoice_metadata['status'] = 'sent'
-                    invoice_metadata['sentAt'] = datetime.now().isoformat()
-                    invoice_metadata['sentTo'] = email_recipients
-
-                    # Persist updated status to DynamoDB
+                    # Persist updated status to DynamoDB first, before updating response
+                    # This ensures the response status matches the database state
                     try:
+                        invoice_metadata['status'] = 'sent'
+                        invoice_metadata['sentAt'] = datetime.now().isoformat()
+                        invoice_metadata['sentTo'] = email_recipients
+
                         invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
                         invoices_table.put_item(Item=invoice_metadata)
+
+                        # Only update response if database update succeeded
+                        response_data['sent'] = email_recipients
+                        response_data['status'] = 'sent'
                     except ClientError as e:
                         print(f"Failed to update invoice status after email send: {str(e)}")
-                        # Email was sent successfully, so this is non-critical
-
-                    response_data['sent'] = email_recipients
-                    response_data['status'] = 'sent'
+                        # Email was sent but status update failed
+                        # Keep status as 'draft' to match database state
+                        response_data['sent'] = []
+                        response_data['emailWarning'] = f"Email sent to {', '.join(email_recipients)} but status update failed. Invoice remains in draft status."
 
                 except Exception as e:
                     # Email failed but invoice was saved successfully
