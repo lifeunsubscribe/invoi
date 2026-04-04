@@ -197,6 +197,34 @@ class TestSendWeeklyEmail(unittest.TestCase):
                 include_logs=True  # Missing log_pdf_data and log_pdf_filename
             )
 
+    def test_send_weekly_email_empty_recipients(self):
+        """Test that empty to_addresses raises ValueError."""
+        with self.assertRaises(ValueError):
+            send_weekly_email(
+                to_addresses=[],
+                user_name='Lisa Wadley',
+                week_start='March 24',
+                week_end='March 30, 2026',
+                total_hours=40,
+                total_pay=1120.00,
+                pdf_data=b'fake-invoice-pdf',
+                pdf_filename='INV-001.pdf'
+            )
+
+    def test_send_weekly_email_missing_pdf_data(self):
+        """Test that missing pdf_data raises ValueError."""
+        with self.assertRaises(ValueError):
+            send_weekly_email(
+                to_addresses=['client@example.com'],
+                user_name='Lisa Wadley',
+                week_start='March 24',
+                week_end='March 30, 2026',
+                total_hours=40,
+                total_pay=1120.00,
+                pdf_data=None,
+                pdf_filename='INV-001.pdf'
+            )
+
 
 class TestSendMonthlyEmail(unittest.TestCase):
     """Test send_monthly_email wrapper function."""
@@ -227,6 +255,32 @@ class TestSendMonthlyEmail(unittest.TestCase):
         # Verify call arguments include display name
         call_args = mock_ses.send_raw_email.call_args
         self.assertIn('Lisa Wadley', call_args[1]['Source'])
+
+    def test_send_monthly_email_empty_recipients(self):
+        """Test that empty to_addresses raises ValueError."""
+        with self.assertRaises(ValueError):
+            send_monthly_email(
+                to_addresses=[],
+                user_name='Lisa Wadley',
+                month_label='March 2026',
+                total_hours=160,
+                total_pay=4480.00,
+                pdf_data=b'fake-report-pdf',
+                pdf_filename='RPT-2026-03.pdf'
+            )
+
+    def test_send_monthly_email_missing_pdf_data(self):
+        """Test that missing pdf_data raises ValueError."""
+        with self.assertRaises(ValueError):
+            send_monthly_email(
+                to_addresses=['client@example.com'],
+                user_name='Lisa Wadley',
+                month_label='March 2026',
+                total_hours=160,
+                total_pay=4480.00,
+                pdf_data=None,
+                pdf_filename='RPT-2026-03.pdf'
+            )
 
 
 if __name__ == '__main__':
