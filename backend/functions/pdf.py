@@ -74,6 +74,18 @@ def handler(event, context):
                 'body': json.dumps({'error': 'Invoice ID is required in path'})
             }
 
+        # Extract optional PDF type from query parameters (invoice or log)
+        # Defaults to 'invoice' for backward compatibility
+        query_params = event.get('queryStringParameters') or {}
+        pdf_type = query_params.get('type', 'invoice')
+
+        if pdf_type not in ['invoice', 'log']:
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'error': 'Invalid PDF type. Must be "invoice" or "log"'})
+            }
+
         # Retrieve invoice from DynamoDB
         invoice = get_invoice(user_id, invoice_id)
 
@@ -86,14 +98,19 @@ def handler(event, context):
                 'body': json.dumps({'error': f'Invoice {invoice_id} not found'})
             }
 
-        # Extract PDF S3 key from invoice record
-        pdf_key = invoice.get('pdfKey')
+        # Extract PDF S3 key from invoice record based on requested type
+        if pdf_type == 'log':
+            pdf_key = invoice.get('logPdfKey')
+            pdf_description = 'Service log PDF'
+        else:
+            pdf_key = invoice.get('pdfKey')
+            pdf_description = 'Invoice PDF'
 
         if not pdf_key:
             return {
                 'statusCode': 404,
                 'headers': headers,
-                'body': json.dumps({'error': 'PDF not available for this invoice'})
+                'body': json.dumps({'error': f'{pdf_description} not available for this invoice'})
             }
 
         # Get S3 bucket name from environment (provided by SST link)
