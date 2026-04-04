@@ -86,6 +86,9 @@ class TestSubmitMonthly:
         assert call_args[1]['to_addresses'] == ['accountant@example.com']
         assert call_args[1]['user_name'] == 'Test User'
 
+        # Verify put_invoice called twice (initial save + status update after send)
+        assert mock_put_invoice.call_count == 2
+
     def test_submit_monthly_without_send(self):
         """POST with send=False should save as draft without sending email"""
         event = {
