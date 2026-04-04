@@ -222,6 +222,15 @@ export default $config({
       ],
     });
 
+    // Phase 5: Import historical invoices with sidecar JSON
+    api.route("POST /api/import", {
+      handler: "backend/functions/import_data.handler",
+      link: [usersTable, invoicesTable, bucket],
+      timeout: "60 seconds",
+      memory: "1024 MB",
+      auth: { jwt: { authorizer: "cognito" } },
+    });
+
     // Phase 4: Logo upload, retrieval, and deletion
     api.route("GET /api/logo", {
       handler: "backend/functions/logo.handler",
