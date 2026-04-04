@@ -290,7 +290,17 @@ const defaultConfig = {
 function getActiveClient(config) {
   const clients = config.clients || [];
   const active = clients.find(c => c.id === config.activeClientId);
-  return active || clients[0] || { id:"", name:"", address:"", objective:"", defaultShift:{start:"09:00",end:"17:00"}, meds:[] };
+  const client = active || clients[0] || { id:"", name:"", address:"", objective:"", defaultShift:{start:"09:00",end:"17:00"}, meds:[] };
+
+  // Migration: handle legacy patientName/patientAddress fields
+  if (client.patientName && !client.name) {
+    client.name = client.patientName;
+  }
+  if (client.patientAddress && !client.address) {
+    client.address = client.patientAddress;
+  }
+
+  return client;
 }
 
 function makeClientId() { return "client-" + Date.now(); }
@@ -1341,18 +1351,18 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
           {/* Client & Service Recipient card */}
           <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 2px 20px rgba(0,0,0,0.07)",marginBottom:16}}>
             <div style={{background:chrome.titleBar,padding:"16px 24px"}}>
-              <div style={sectionTitleStyle}>Client & {occLabels.recipientCardTitle}</div>
+              <div style={sectionTitleStyle}>{occLabels.clientFieldLabel} & {occLabels.recipientCardTitle}</div>
               <div style={{fontSize:14,color:chrome.mutedText}}>Who you bill and who receives your services.</div>
             </div>
             <div style={{padding:"20px 24px"}}>
               {/* Client — required, always visible */}
               <div style={{marginBottom:18}}>
-                <label style={labelStyle}>Client Name <span style={{color:acc}}>*</span></label>
+                <label style={labelStyle}>{occLabels.clientFieldLabel} Name <span style={{color:acc}}>*</span></label>
                 <input value={draft.clientName} onChange={e=>updateField("clientName",e.target.value)} style={inputStyle}
                   placeholder="Person or entity that pays for services"/>
               </div>
               <div style={{marginBottom:18}}>
-                <label style={labelStyle}>Client Email <span style={{color:acc}}>*</span></label>
+                <label style={labelStyle}>{occLabels.clientFieldLabel} Email <span style={{color:acc}}>*</span></label>
                 <input value={draft.clientEmail} onChange={e=>updateField("clientEmail",e.target.value)} style={inputStyle}
                   placeholder="Billing email"/>
               </div>
@@ -2050,6 +2060,7 @@ function WeeklyPage({ config, onBack }) {
   const week  = useMemo(()=>getWeekRange(weekOffset),[weekOffset]);
   const acc   = config.accent;
   const savedPath = weeklyPath(config.saveFolder, week.invNum);
+  const occLabels = getOccLabels(config);
 
   const [hours, setHours] = useState({Monday:8,Tuesday:8,Wednesday:8,Thursday:8,Friday:8,Saturday:0,Sunday:0});
   const [hoursSource, setHoursSource] = useState({}); // {Monday: "log"|"saved"|"default"}
@@ -2492,7 +2503,7 @@ function WeeklyPage({ config, onBack }) {
 
               <div style={{flexShrink:0,marginBottom:32}}>
                 <div style={{fontSize:12,letterSpacing:2,textTransform:"uppercase",color:"#9a8070",marginBottom:6}}>Send To</div>
-                {[{label:"Client",value:clientEmail,set:setClientEmail},{label:"Accountant",value:accountantEmail,set:setAccountantEmail}].map(({label,value,set})=>(
+                {[{label:occLabels.clientFieldLabel,value:clientEmail,set:setClientEmail},{label:"Accountant",value:accountantEmail,set:setAccountantEmail}].map(({label,value,set})=>(
                   <div key={label} style={{marginBottom:7}}>
                     <div style={{fontSize:13,color:"#b0988a",marginBottom:3}}>{label}</div>
                     <input value={value} onChange={e=>set(e.target.value)}
