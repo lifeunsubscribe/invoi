@@ -175,4 +175,43 @@ describe('HistoryPage', () => {
     expect(screen.getByText('List')).toBeInTheDocument()
     expect(screen.getByText('Focus')).toBeInTheDocument()
   })
+
+  it('displays error state when API returns non-404 error', async () => {
+    // Mock 500 server error
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error'
+      })
+    ) as any
+
+    render(<HistoryPage config={mockConfig} onBack={vi.fn()} />)
+
+    // Wait for error state to appear
+    await waitFor(() => {
+      expect(screen.getByText(/Could not load invoices/i)).toBeInTheDocument()
+    })
+
+    // Should show error icon and message
+    expect(screen.getByText('⚠️')).toBeInTheDocument()
+    expect(screen.getByText(/Failed to fetch invoices: Internal Server Error/i)).toBeInTheDocument()
+  })
+
+  it('handles network errors during fetch', async () => {
+    // Mock network failure (fetch throws)
+    global.fetch = vi.fn(() =>
+      Promise.reject(new Error('Network request failed'))
+    ) as any
+
+    render(<HistoryPage config={mockConfig} onBack={vi.fn()} />)
+
+    // Wait for error state to appear
+    await waitFor(() => {
+      expect(screen.getByText(/Could not load invoices/i)).toBeInTheDocument()
+    })
+
+    // Should show error message
+    expect(screen.getByText(/Network request failed/i)).toBeInTheDocument()
+  })
 })
