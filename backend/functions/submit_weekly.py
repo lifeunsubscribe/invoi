@@ -469,6 +469,12 @@ def _populate_hours_from_default_shift(default_shift):
         print(f"ERROR: {error_msg} - {str(e)}")
         raise ValueError(error_msg)
 
+    # Validate that calculated hours are positive and reasonable
+    if hours_per_shift <= 0:
+        raise ValueError(f"Invalid default shift: end time must be after start time (start='{start_time}', end='{end_time}', calculated hours={hours_per_shift})")
+    if hours_per_shift > 24:
+        raise ValueError(f"Invalid default shift: shift duration cannot exceed 24 hours (start='{start_time}', end='{end_time}', calculated hours={hours_per_shift})")
+
     # Map abbreviated day names to full names
     day_mapping = {
         'Mon': 'Monday',
@@ -495,6 +501,8 @@ def _populate_hours_from_default_shift(default_shift):
         full_day = day_mapping.get(abbrev_day)
         if full_day:
             hours[full_day] = hours_per_shift
+        else:
+            print(f"WARNING: Unrecognized day abbreviation '{abbrev_day}' in default shift configuration. Expected one of: {', '.join(day_mapping.keys())}")
 
     return hours
 
