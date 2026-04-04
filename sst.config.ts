@@ -115,6 +115,15 @@ export default $config({
       link: [invoicesTable],
     });
 
+    // Phase 2: Submit monthly report (aggregate weekly invoices into monthly PDF)
+    api.route("POST /api/submit/monthly", {
+      handler: "backend/functions/submit_monthly.handler",
+      link: [usersTable, invoicesTable, bucket],
+      layers: [reportlabLayer.arn],
+      timeout: "30 seconds",
+      memory: "1024 MB",
+    });
+
     // Phase 2: Test ReportLab layer (temporary endpoint for validation)
     api.route("GET /api/test-reportlab", {
       handler: "backend/functions/test_reportlab.handler",
