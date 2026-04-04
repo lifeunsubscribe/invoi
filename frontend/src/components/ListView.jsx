@@ -664,21 +664,24 @@ export default function ListView({ invoices, config, onInvoiceClick }) {
 
       {/* Bulk Action Bar (Fixed at Bottom) */}
       {selectedIds.size > 0 && (
-        <div style={{
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background: "#2e2218",
-          borderTop: `2px solid ${acc}`,
-          padding: "16px 20px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-          zIndex: 100,
-          boxShadow: "0 -4px 16px rgba(0,0,0,0.1)"
-        }}>
+        <div
+          role="toolbar"
+          aria-label="Bulk actions"
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: "#2e2218",
+            borderTop: `2px solid ${acc}`,
+            padding: "16px 20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+            zIndex: 100,
+            boxShadow: "0 -4px 16px rgba(0,0,0,0.1)"
+          }}>
           {/* Selection Count */}
           <div style={{
             fontSize: 14,

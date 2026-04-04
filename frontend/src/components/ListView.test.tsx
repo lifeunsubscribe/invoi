@@ -6,14 +6,31 @@ const mockConfig = {
   accent: '#b76e79'
 };
 
+// Generate dates relative to test execution time to prevent flaky tests
+const now = new Date();
+const formatDate = (date) => date.toISOString().split('T')[0];
+
+// Recent dates (within last 30 days)
+const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
+const tenDaysAgoEnd = new Date(tenDaysAgo.getTime() + 6 * 24 * 60 * 60 * 1000);
+const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
+const fiveDaysAgoEnd = new Date(fiveDaysAgo.getTime() + 6 * 24 * 60 * 60 * 1000);
+const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+const twoDaysAgoEnd = new Date(twoDaysAgo.getTime() + 6 * 24 * 60 * 60 * 1000);
+
+// Old date (outside 30 days, for testing date filter)
+const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+const ninetyDaysAgoEnd = new Date(ninetyDaysAgo.getTime() + 6 * 24 * 60 * 60 * 1000);
+const overdueDueDate = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
+
 const mockInvoices = [
   {
     invoiceId: 'INV-001',
     invoiceNumber: 'INV-047',
     clientId: 'Client A',
     status: 'draft',
-    weekStart: '2026-03-24',
-    weekEnd: '2026-03-30',
+    weekStart: formatDate(tenDaysAgo),
+    weekEnd: formatDate(tenDaysAgoEnd),
     totalHours: 40,
     totalPay: 1120.00
   },
@@ -22,9 +39,9 @@ const mockInvoices = [
     invoiceNumber: 'INV-048',
     clientId: 'Client B',
     status: 'sent',
-    weekStart: '2026-03-31',
-    weekEnd: '2026-04-06',
-    dueDate: '2026-04-06',
+    weekStart: formatDate(fiveDaysAgo),
+    weekEnd: formatDate(fiveDaysAgoEnd),
+    dueDate: formatDate(fiveDaysAgoEnd),
     totalHours: 35,
     totalPay: 980.00
   },
@@ -33,8 +50,8 @@ const mockInvoices = [
     invoiceNumber: 'INV-049',
     clientId: 'Client A',
     status: 'paid',
-    weekStart: '2026-04-07',
-    weekEnd: '2026-04-13',
+    weekStart: formatDate(twoDaysAgo),
+    weekEnd: formatDate(twoDaysAgoEnd),
     totalHours: 42,
     totalPay: 1176.00
   },
@@ -43,9 +60,9 @@ const mockInvoices = [
     invoiceNumber: 'INV-050',
     clientId: 'Client C',
     status: 'sent',
-    weekStart: '2026-01-01',
-    weekEnd: '2026-01-07',
-    dueDate: '2026-01-07', // Overdue
+    weekStart: formatDate(ninetyDaysAgo),
+    weekEnd: formatDate(ninetyDaysAgoEnd),
+    dueDate: formatDate(overdueDueDate), // Overdue
     totalHours: 38,
     totalPay: 1064.00
   }
