@@ -33,4 +33,5 @@ backend/node_modules
 
 # Development
 SCRATCHPAD.md
+.scratchpad.md
 .claude_todo.md
