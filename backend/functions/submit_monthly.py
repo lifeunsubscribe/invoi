@@ -3,6 +3,8 @@ import sys
 import os
 from datetime import datetime
 import calendar
+import base64
+import boto3
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -11,6 +13,11 @@ from services.db_service import query_invoices, get_user, put_invoice
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from botocore.exceptions import ClientError
+
+# S3 client for logo fetching
+s3_client = boto3.client('s3')
+# SST Ion provides bucket name via SST_Resource_<name>_name when linked
+BUCKET_NAME = os.environ.get('SST_Resource_InvoiStorage_name')
 
 
 def handler(event, context):
@@ -173,6 +180,16 @@ def handler(event, context):
         month_name = calendar.month_name[month_int]
         month_label = f"{month_name} {year_int}"
 
+        # Fetch logo from S3 if configured
+        logo_data = None
+        logo_key = user_config.get('logoKey')
+        if logo_key:
+            try:
+                logo_data = _fetch_logo_from_s3(logo_key)
+            except Exception as e:
+                # Log error but don't fail - report can be generated without logo
+                print(f"Failed to fetch logo from S3: {str(e)}")
+
         # Generate monthly report PDF
         # Uses user's template, rate, and other config from user_config
         pdf_bytes = generate_monthly_report(
@@ -182,7 +199,8 @@ def handler(event, context):
             template_id=user_config.get('template', 'caring-hands'),
             signature_font=user_config.get('signatureFont', ''),
             sign_date=datetime.now().strftime('%Y-%m-%d'),
-            invoice_date=datetime.now()
+            invoice_date=datetime.now(),
+            logo_data=logo_data
         )
 
         # Validate PDF generation succeeded
@@ -358,3 +376,35 @@ def _extract_user_id_from_token(event):
         pass
 
     return None
+
+
+def _fetch_logo_from_s3(logo_key):
+    """
+    Fetch logo image from S3 and return as base64-encoded data URL.
+
+    Args:
+        logo_key: str - S3 key for logo (e.g., users/{userId}/logo.png)
+
+    Returns:
+        str - Base64-encoded data URL (e.g., data:image/png;base64,...)
+        None - If logo cannot be fetched
+
+    Raises:
+        ClientError - If S3 operation fails
+    """
+    try:
+        # Fetch logo from S3
+        response = s3_client.get_object(Bucket=BUCKET_NAME, Key=logo_key)
+        logo_bytes = response['Body'].read()
+        content_type = response.get('ContentType', 'application/octet-stream')
+
+        # Encode as base64 data URL
+        base64_data = base64.b64encode(logo_bytes).decode('utf-8')
+        data_url = f"data:{content_type};base64,{base64_data}"
+
+        return data_url
+
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+        print(f"Failed to fetch logo from S3 (key: {logo_key}): {error_code}")
+        raise

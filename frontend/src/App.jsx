@@ -820,6 +820,9 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
     if (d.taxEnabled === undefined) d.taxEnabled = false;
     if (d.taxRate === undefined) d.taxRate = 0;
     if (!d.taxLabel) d.taxLabel = "Sales Tax";
+    // Initialize logo settings with defaults if not present
+    if (!d.logoKey) d.logoKey = "";
+    if (!d.logoSize) d.logoSize = "medium";
     return d;
   });
   const [folderOverridden, setFolderOverridden] = useState(config.saveFolder && config.name ? config.saveFolder !== deriveSaveFolder(config.name) : false);
@@ -827,7 +830,12 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
   const [saveError, setSaveError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
   const folderRef = useRef(null);
+  const fileInputRef = useRef(null);
   const saveInProgressRef = useRef(false);
   const acc = draft.accent;
 
@@ -871,6 +879,155 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
       return `${prefix}${sep}${year}${sep}${paddedNum}`;
     }
     return `${prefix}${sep}${paddedNum}`;
+  };
+
+  // Logo upload handlers
+  const handleLogoFile = async (file) => {
+    setLogoError(null);
+
+    // Validate file type (SVG excluded due to XSS security risk)
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+    if (!allowedTypes.includes(file.type)) {
+      setLogoError('Please upload a PNG or JPG file');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setLogoError(`File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds 5MB limit`);
+      return;
+    }
+
+    // Read file as data URL for preview
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target.result;
+      setLogoPreview(dataUrl);
+
+      // Upload to backend
+      setLogoUploading(true);
+      try {
+        const token = getAuthToken();
+        const response = await fetch(`${API_BASE}/api/logo`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token,
+          },
+          body: JSON.stringify({
+            imageData: dataUrl,
+            logoSize: draft.logoSize || 'medium'
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to upload logo');
+        }
+
+        const result = await response.json();
+        setDraft(d => ({
+          ...d,
+          logoKey: result.logoKey,
+          logoSize: result.logoSize
+        }));
+      } catch (error) {
+        console.error('Logo upload failed:', error);
+        setLogoError(error.message);
+        setLogoPreview(null);
+      } finally {
+        setLogoUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      handleLogoFile(files[0]);
+    }
+  };
+
+  const handleLogoDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleLogoInputChange = (e) => {
+    const files = e.target?.files;
+    if (files && files.length > 0) {
+      handleLogoFile(files[0]);
+    }
+  };
+
+  const handleLogoDelete = async () => {
+    setLogoError(null);
+    setLogoUploading(true);
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE}/api/logo`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': token,
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete logo');
+      }
+
+      setDraft(d => ({
+        ...d,
+        logoKey: '',
+        logoSize: 'medium'
+      }));
+      setLogoPreview(null);
+    } catch (error) {
+      console.error('Logo delete failed:', error);
+      setLogoError(error.message);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleLogoSizeChange = async (size) => {
+    // Update draft state immediately for responsive UI
+    let currentDraft;
+    setDraft(d => {
+      currentDraft = {...d, logoSize: size};
+      return currentDraft;
+    });
+
+    // Auto-save logo size preference to backend
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE}/api/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token,
+        },
+        body: JSON.stringify(currentDraft)
+      });
+
+      if (!response.ok) {
+        console.error('Failed to save logo size preference');
+      }
+    } catch (error) {
+      console.error('Error saving logo size:', error);
+    }
   };
 
   const updateClient = (field, value) => {
@@ -947,6 +1104,34 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
       setTimeout(()=>folderRef.current.scrollIntoView({ behavior:"smooth", block:"center" }), 120);
     }
   },[scrollToFolder]);
+
+  // Fetch logo from backend if user has one configured
+  useEffect(() => {
+    if (draft.logoKey && !logoPreview) {
+      const fetchLogo = async () => {
+        try {
+          const token = getAuthToken();
+          const response = await fetch(`${API_BASE}/api/logo`, {
+            method: 'GET',
+            headers: {
+              'Authorization': token,
+            }
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            setLogoPreview(result.logoData);
+          } else if (response.status !== 404) {
+            // Only log non-404 errors (404 just means no logo)
+            console.error('Failed to fetch logo:', response.status);
+          }
+        } catch (error) {
+          console.error('Error fetching logo:', error);
+        }
+      };
+      fetchLogo();
+    }
+  }, [draft.logoKey, logoPreview]);
 
   // Save profile changes to persistent storage via API
   const handleSave = async () => {
@@ -1191,6 +1376,174 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Logo & Branding */}
+          <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 2px 20px rgba(0,0,0,0.07)",marginBottom:16}}>
+            <div style={{background:chrome.titleBar,padding:"16px 24px"}}>
+              <div style={sectionTitleStyle}>Logo & Branding</div>
+              <div style={{fontSize:14,color:chrome.mutedText}}>Upload your logo to appear on all invoices and reports.</div>
+            </div>
+            <div style={{padding:"20px 24px"}}>
+              {/* Upload area */}
+              <div
+                onDragEnter={handleLogoDrag}
+                onDragLeave={handleLogoDrag}
+                onDragOver={handleLogoDrag}
+                onDrop={handleLogoDrop}
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  border: `2px dashed ${dragActive ? acc : '#d0c0b0'}`,
+                  borderRadius: 12,
+                  padding: '24px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  background: dragActive ? tint(acc, 0.05) : '#fdfaf8',
+                  transition: 'all 0.2s',
+                  marginBottom: 16
+                }}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg"
+                  onChange={handleLogoInputChange}
+                  style={{display: 'none'}}
+                />
+                {logoUploading ? (
+                  <div style={{color: '#9a8070', fontSize: 14}}>Uploading...</div>
+                ) : logoPreview ? (
+                  <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12}}>
+                    <img
+                      src={logoPreview}
+                      alt="Logo preview"
+                      style={{
+                        maxWidth: '200px',
+                        maxHeight: '120px',
+                        objectFit: 'contain'
+                      }}
+                    />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleLogoDelete(); }}
+                      style={{
+                        fontSize: 12,
+                        color: '#c07070',
+                        background: 'none',
+                        border: '1.5px solid #e0c0c0',
+                        borderRadius: 6,
+                        padding: '5px 12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Remove Logo
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{fontSize: 16, color: '#2c1810', marginBottom: 8}}>
+                      Drop logo here or click to upload
+                    </div>
+                    <div style={{fontSize: 12, color: '#9a8070'}}>
+                      PNG or JPG • At least 300×300px • Max 5MB
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Error message */}
+              {logoError && (
+                <div style={{
+                  background: '#fef0f0',
+                  border: '1.5px solid #f0c0c0',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  fontSize: 13,
+                  color: '#c07070',
+                  marginBottom: 16
+                }}>
+                  {logoError}
+                </div>
+              )}
+
+              {/* Logo size slider */}
+              {logoPreview && (
+                <div style={{marginBottom: 16}}>
+                  <label style={labelStyle}>Logo Size on Invoices</label>
+                  <div style={{display: 'flex', gap: 8, marginTop: 8}}>
+                    {['small', 'medium', 'large'].map(size => (
+                      <button
+                        key={size}
+                        onClick={() => handleLogoSizeChange(size)}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: (draft.logoSize || 'medium') === size ? `2px solid ${acc}` : '1.5px solid #e8ddd8',
+                          background: (draft.logoSize || 'medium') === size ? tint(acc, 0.1) : 'white',
+                          color: (draft.logoSize || 'medium') === size ? acc : '#6a4a40',
+                          fontSize: 13,
+                          fontWeight: (draft.logoSize || 'medium') === size ? 600 : 400,
+                          cursor: 'pointer',
+                          textTransform: 'capitalize'
+                        }}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Live preview */}
+              {logoPreview && (
+                <div>
+                  <label style={labelStyle}>Preview on Invoice</label>
+                  <div style={{
+                    background: getTheme(draft.template || 'morning-light').chromeBg,
+                    border: `1px solid ${getTheme(draft.template || 'morning-light').chromeBorder}`,
+                    borderRadius: 12,
+                    padding: '16px',
+                    marginTop: 8
+                  }}>
+                    {/* Mini invoice mockup */}
+                    <div style={{
+                      background: 'white',
+                      borderRadius: 8,
+                      padding: '12px',
+                      border: `2px solid ${getTheme(draft.template || 'morning-light').accent}`
+                    }}>
+                      <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12}}>
+                        <div>
+                          <div style={{fontSize: 13, fontWeight: 600, color: getTheme(draft.template || 'morning-light').textDark}}>
+                            {draft.name || 'Your Name'}
+                          </div>
+                          <div style={{fontSize: 10, color: getTheme(draft.template || 'morning-light').textMedium, marginTop: 2}}>
+                            Invoice #{formatInvoiceNumber(1)}
+                          </div>
+                        </div>
+                        <img
+                          src={logoPreview}
+                          alt="Logo"
+                          style={{
+                            maxWidth: draft.logoSize === 'small' ? '40px' : draft.logoSize === 'large' ? '80px' : '60px',
+                            maxHeight: draft.logoSize === 'small' ? '40px' : draft.logoSize === 'large' ? '80px' : '60px',
+                            objectFit: 'contain'
+                          }}
+                        />
+                      </div>
+                      <div style={{
+                        borderTop: `1px solid ${getTheme(draft.template || 'morning-light').chromeBorder}`,
+                        paddingTop: 8,
+                        fontSize: 9,
+                        color: getTheme(draft.template || 'morning-light').textLight
+                      }}>
+                        Invoice preview • {draft.logoSize || 'medium'} size
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
