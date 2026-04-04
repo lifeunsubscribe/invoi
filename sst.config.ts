@@ -179,6 +179,14 @@ export default $config({
       memory: "256 MB",
     });
 
+    // Phase 4: Export invoices as ZIP or CSV
+    api.route("POST /api/export", {
+      handler: "backend/functions/export.handler",
+      link: [invoicesTable, bucket],
+      timeout: "30 seconds",
+      memory: "1024 MB",
+    });
+
     // Phase 4: Logo upload, retrieval, and deletion
     api.route("GET /api/logo", {
       handler: "backend/functions/logo.handler",
