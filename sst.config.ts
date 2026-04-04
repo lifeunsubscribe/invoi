@@ -112,6 +112,18 @@ export default $config({
         allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allowHeaders: ["Content-Type", "Authorization"],
       },
+      transform: {
+        // Configure API Gateway throttling to prevent abuse
+        // Rate limit: 100 requests/second per user
+        // Burst limit: 200 requests (handles short traffic spikes)
+        // When exceeded, API Gateway returns 429 Too Many Requests
+        api: (args) => {
+          args.defaultRouteSettings = {
+            throttlingBurstLimit: 200,
+            throttlingRateLimit: 100,
+          };
+        },
+      },
     });
 
     // JWT Authorizer for protected routes
