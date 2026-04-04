@@ -26,6 +26,24 @@ export function getAuthToken() {
   // - For Cognito: fetchAuthSession().then(session => session.tokens?.idToken?.toString())
   // - For Auth0: await auth0.getTokenSilently()
 
+  // PRODUCTION SAFEGUARD: Prevent stub authentication from reaching production
+  // This check ensures the app fails fast if deployed to production without real auth
+  if (import.meta.env.PROD) {
+    throw new Error(
+      'PRODUCTION ERROR: Stub authentication is not allowed in production. ' +
+      'Real Cognito/Auth0 integration must be implemented before production deployment. ' +
+      'See frontend/src/auth.jsx for implementation TODOs.'
+    );
+  }
+
+  // Development-only warning to remind developers this is temporary
+  if (import.meta.env.DEV && typeof console !== 'undefined') {
+    console.warn(
+      '[DEV WARNING] Using stub authentication token. ' +
+      'This is for development only and will not work in production.'
+    );
+  }
+
   // Stub token for Phase 1 development
   // Backend currently validates presence but has TODO for full Cognito claim extraction
   return 'Bearer stub-jwt-token-phase1';
