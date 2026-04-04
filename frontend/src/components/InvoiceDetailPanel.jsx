@@ -144,13 +144,19 @@ export default function InvoiceDetailPanel({
   // Navigation handlers
   const handlePrev = () => {
     if (hasPrev && onNavigate) {
-      onNavigate(invoices[currentIndex - 1]);
+      const prevInvoice = invoices[currentIndex - 1];
+      if (prevInvoice) {
+        onNavigate(prevInvoice);
+      }
     }
   };
 
   const handleNext = () => {
     if (hasNext && onNavigate) {
-      onNavigate(invoices[currentIndex + 1]);
+      const nextInvoice = invoices[currentIndex + 1];
+      if (nextInvoice) {
+        onNavigate(nextInvoice);
+      }
     }
   };
 
