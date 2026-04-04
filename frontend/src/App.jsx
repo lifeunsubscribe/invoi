@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { getAuthToken, isAuthenticated } from "./auth.jsx";
 import HistoryPage from "./components/HistoryPage.jsx";
 import LandingPage from "./components/LandingPage.jsx";
+import PrivacyPolicy from "./components/PrivacyPolicy.jsx";
+import TermsOfService from "./components/TermsOfService.jsx";
 
 // API configuration - VITE_API_URL is injected by SST during deployment
 // For local development with `npx sst dev`, the URL is automatically provided
@@ -3750,7 +3752,7 @@ export default function App() {
   // and provides "Sign in with Google" CTAs. Once OAuth is configured, users will
   // authenticate and be redirected to the dashboard (DashboardPage below).
   if (!isAuthenticated()) {
-    return <LandingPage onSignIn={handleSignIn} />;
+    return <LandingPage onSignIn={handleSignIn} onNavigate={setPage} />;
   }
 
   // Show error banner if config fetch failed (but continue with defaults)
@@ -3773,6 +3775,10 @@ export default function App() {
       <div style={{fontSize:11,color:"#6a8a60",marginTop:4}}>End-to-end connection verified</div>
     </div>
   ) : null;
+
+  // [Phase 6] Legal pages accessible to both authenticated and unauthenticated users
+  if (page==="privacy") return <PrivacyPolicy onBack={()=>setPage("menu")}/>;
+  if (page==="terms")   return <TermsOfService onBack={()=>setPage("menu")}/>;
 
   if (page==="log")     return <>{ErrorBanner}{HelloBanner}<DailyLogPage config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="weekly")  return <>{ErrorBanner}{HelloBanner}<WeeklyPage  config={config} onBack={()=>setPage("menu")}/></>;
