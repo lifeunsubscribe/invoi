@@ -119,48 +119,49 @@ export default function HistoryPage({ config, onBack }) {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
 
   // Fetch invoices from API
-  useEffect(() => {
-    async function fetchInvoices() {
-      try {
-        setLoading(true);
-        setError(null);
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        const token = await getAuthToken();
-        if (!token) {
-          setError("Not authenticated");
+      const token = await getAuthToken();
+      if (!token) {
+        setError("Not authenticated");
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/api/invoices`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        // If endpoint doesn't exist yet (404), treat as empty list
+        if (response.status === 404) {
+          setInvoices([]);
           setLoading(false);
           return;
         }
-
-        const response = await fetch(`${API_BASE}/api/invoices`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          // If endpoint doesn't exist yet (404), treat as empty list
-          if (response.status === 404) {
-            setInvoices([]);
-            setLoading(false);
-            return;
-          }
-          throw new Error(`Failed to fetch invoices: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        setInvoices(data.invoices || []);
-      } catch (err) {
-        console.error("Error fetching invoices:", err);
-        // Show actual errors to the user
-        setError(err.message || "An unexpected error occurred");
-        setInvoices([]);
-      } finally {
-        setLoading(false);
+        throw new Error(`Failed to fetch invoices: ${response.statusText}`);
       }
-    }
 
+      const data = await response.json();
+      setInvoices(data.invoices || []);
+    } catch (err) {
+      console.error("Error fetching invoices:", err);
+      // Show actual errors to the user
+      setError(err.message || "An unexpected error occurred");
+      setInvoices([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load invoices on mount
+  useEffect(() => {
     fetchInvoices();
   }, []);
 
@@ -387,6 +388,7 @@ export default function HistoryPage({ config, onBack }) {
                     invoices={invoices}
                     config={config}
                     onInvoiceClick={handleInvoiceClick}
+                    onRefresh={fetchInvoices}
                   />
                 )}
 
