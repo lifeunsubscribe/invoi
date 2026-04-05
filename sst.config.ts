@@ -109,7 +109,7 @@ export default $config({
         allowOrigins: $app.stage === "production"
           ? ["https://goinvoi.com", "https://www.goinvoi.com"]
           : ["*"],
-        allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowHeaders: ["Content-Type", "Authorization"],
       },
       transform: {

@@ -610,40 +610,54 @@ class TestAuthAndValidation:
 
 
 class TestCORS:
-    """Tests for CORS handling"""
+    """Tests for CORS handling
 
-    def test_options_request_returns_200(self):
-        """OPTIONS preflight request should return 200 with CORS headers"""
+    Note: CORS is now handled by API Gateway (configured in sst.config.ts).
+    Lambda functions no longer set CORS headers directly.
+    API Gateway automatically adds CORS headers based on the configuration.
+    """
+
+    def test_lambda_response_has_no_cors_headers(self):
+        """Lambda responses should not include CORS headers (API Gateway handles them)"""
         event = {
             'requestContext': {
-                'http': {'method': 'OPTIONS'}
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
             },
-            'headers': {'Authorization': 'Bearer valid-token'}
-        }
-
-        response = handler(event, {})
-
-        assert response['statusCode'] == 200
-        assert 'Access-Control-Allow-Origin' in response['headers']
-        assert 'Access-Control-Allow-Methods' in response['headers']
-        assert 'Access-Control-Allow-Headers' in response['headers']
-        assert 'POST' in response['headers']['Access-Control-Allow-Methods']
-
-    def test_all_responses_include_cors_headers(self):
-        """All responses should include CORS headers"""
-        event = {
-            'requestContext': {'http': {'method': 'POST'}},
-            'headers': {},  # Missing auth to trigger 401
+            'headers': {'Authorization': 'Bearer valid-token'},
             'body': json.dumps({
-                'invoiceIds': ['INV-001'],
+                'invoiceIds': ['INV-20260324'],
                 'format': 'csv'
             })
         }
 
-        response = handler(event, {})
+        mock_invoice = {
+            'userId': 'user-123',
+            'invoiceId': 'INV-20260324',
+            'weekStart': '2026-03-24',
+            'weekEnd': '2026-03-30',
+            'totalHours': 40,
+            'totalPay': 1000.00
+        }
 
-        assert 'Access-Control-Allow-Origin' in response['headers']
-        assert response['headers']['Access-Control-Allow-Origin'] == '*'
+        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
+            with patch('functions.export.get_invoice', return_value=mock_invoice):
+                with patch('functions.export.s3_client') as mock_s3:
+                    mock_s3.put_object.return_value = {}
+                    mock_s3.generate_presigned_url.return_value = 'https://s3.amazonaws.com/signed-url'
+                    response = handler(event, {})
+
+        assert response['statusCode'] == 200
+        # Lambda should NOT set CORS headers - API Gateway handles them
+        assert 'Access-Control-Allow-Origin' not in response['headers']
+        assert 'Access-Control-Allow-Methods' not in response['headers']
+        assert 'Access-Control-Allow-Headers' not in response['headers']
+        # But Content-Type should still be set
+        assert response['headers']['Content-Type'] == 'application/json'
 
 
 class TestErrorHandling:

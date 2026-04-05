@@ -431,3 +431,63 @@ class TestSubmitMonthly:
         mock_generate.assert_called_once()
         mock_save_pdf.assert_called_once()
         mock_put_invoice.assert_called_once()
+
+    def test_lambda_response_has_no_cors_headers(self):
+        """Lambda responses should not include CORS headers (API Gateway handles them)"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'year': 2026,
+                'month': 3,
+                'send': False,
+                'accountantEmail': 'accountant@example.com'
+            })
+        }
+
+        # Mock user config
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'rate': 28.00,
+            'template': 'morning-light',
+            'signatureFont': 'Dancing Script'
+        }
+
+        # Mock weekly invoices
+        mock_weekly_invoices = [
+            {
+                'invoiceId': 'INV-20260301',
+                'weekStart': '2026-03-01',
+                'weekEnd': '2026-03-07',
+                'totalHours': 40
+            }
+        ]
+
+        # Mock PDF generation
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        with patch.dict(os.environ, {
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_monthly.get_user', return_value=mock_user):
+                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                    with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
+                        with patch('functions.submit_monthly.save_pdf_to_s3'):
+                            with patch('functions.submit_monthly.put_invoice'):
+                                response = handler(event, {})
+
+        assert response['statusCode'] == 200
+        # Lambda should NOT set CORS headers - API Gateway handles them
+        assert 'Access-Control-Allow-Origin' not in response['headers']
+        assert 'Access-Control-Allow-Methods' not in response['headers']
+        assert 'Access-Control-Allow-Headers' not in response['headers']
+        # But Content-Type should still be set
+        assert response['headers']['Content-Type'] == 'application/json'

@@ -24,27 +24,19 @@ def handler(event, context):
     POST: Updates user profile in DynamoDB
 
     Both methods require valid JWT in Authorization header.
+
+    Note: CORS is handled by API Gateway (configured in sst.config.ts).
+    Lambda functions should not set CORS headers.
     """
-    # CORS headers for all responses
+    # Response headers
     headers = {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }
 
     try:
         # Extract HTTP method (supports both API Gateway v1 and v2 formats)
         http_method = event.get('requestContext', {}).get('http', {}).get('method') or event.get('httpMethod', 'GET')
         logger.info(f"Received request: method={http_method} path=/api/config")
-
-        # Handle CORS preflight requests before auth check
-        if http_method == 'OPTIONS':
-            return {
-                'statusCode': 200,
-                'headers': headers,
-                'body': ''
-            }
 
         # Extract userId from JWT claims
         # TODO: Once Cognito is set up in Phase 1, this will come from:

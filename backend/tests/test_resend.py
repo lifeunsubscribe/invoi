@@ -276,15 +276,43 @@ class TestResendHandler:
         body = json.loads(response['body'])
         assert 'Cannot resend more than' in body['error']
 
-    def test_resend_cors_preflight(self):
-        """Test CORS preflight OPTIONS request"""
+    @patch('functions.resend.get_user')
+    @patch('functions.resend.get_invoice')
+    def test_lambda_response_has_no_cors_headers(self, mock_get_invoice, mock_get_user):
+        """Lambda responses should not include CORS headers (API Gateway handles them)"""
         event = {
-            'requestContext': {'http': {'method': 'OPTIONS'}},
-            'headers': {}
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer token'},
+            'body': json.dumps({
+                'invoiceIds': ['INV-001']
+            })
         }
+
+        # Mock user config
+        mock_get_user.return_value = {
+            'userId': 'user-123',
+            'name': 'Lisa Wadley',
+            'clients': []
+        }
+
+        # Mock invoice not found to get quick response
+        mock_get_invoice.return_value = None
+
+        os.environ['InvoiStorage'] = 'test-bucket'
 
         response = handler(event, {})
 
         assert response['statusCode'] == 200
-        assert response['headers']['Access-Control-Allow-Origin'] == '*'
-        assert response['headers']['Access-Control-Allow-Methods'] == 'POST, OPTIONS'
+        # Lambda should NOT set CORS headers - API Gateway handles them
+        assert 'Access-Control-Allow-Origin' not in response['headers']
+        assert 'Access-Control-Allow-Methods' not in response['headers']
+        assert 'Access-Control-Allow-Headers' not in response['headers']
+        # But Content-Type should still be set
+        assert response['headers']['Content-Type'] == 'application/json'
