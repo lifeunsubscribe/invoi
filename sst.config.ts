@@ -113,8 +113,9 @@ export default $config({
         allowHeaders: ["Content-Type", "Authorization"],
       },
       transform: {
-        // Configure API Gateway throttling to prevent abuse
-        // Rate limit: 100 requests/second (aggregate across all users at stage level)
+        // Stage-level throttling: aggregate across all users (API Gateway built-in)
+        // Per-user throttling is handled in Lambda handlers via services/rate_limit.py
+        // Rate limit: 100 requests/second aggregate
         // Burst limit: 200 requests (handles short traffic spikes)
         // When exceeded, API Gateway returns 429 Too Many Requests
         api: (args) => {

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "sst dev",
     "deploy": "sst deploy",
-    "remove": "sst remove"
+    "remove": "sst remove",
+    "test": "echo 'No tests configured yet'"
   },
   "devDependencies": {
     "sst": "^4.6.11"

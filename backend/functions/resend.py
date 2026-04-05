@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from services.db_service import get_invoice, get_user
 from services.mail_service import send_email
 from services.logging_config import setup_logging
+from services.rate_limit import check_rate_limit
 
 # Configure logging for this Lambda function
 setup_logging()
@@ -67,6 +68,11 @@ def handler(event, context):
                 'headers': headers,
                 'body': json.dumps({'error': 'Invalid or expired token'})
             }
+
+        # Per-user rate limiting (5 resends per 60s window)
+        rate_response = check_rate_limit(user_id, max_requests=5, window_seconds=60)
+        if rate_response:
+            return rate_response
 
         # Parse request body
         body = event.get('body', '{}')
