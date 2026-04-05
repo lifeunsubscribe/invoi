@@ -7,6 +7,7 @@ import PrivacyPolicy from "./components/PrivacyPolicy.jsx";
 import TermsOfService from "./components/TermsOfService.jsx";
 import WelcomePage from "./components/WelcomePage.jsx";
 import Tooltip from "./components/Tooltip.jsx";
+import theme from "./theme.js";
 
 // API configuration - VITE_API_URL is injected by SST during deployment
 // For local development with `npx sst dev`, the URL is automatically provided
@@ -24,27 +25,27 @@ if (!API_BASE && import.meta.env.DEV) {
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 const TEMPLATES = [
   { id:"morning-light", label:"Morning Light", emoji:"🌸", structure:"light-header", fontStyle:"serif",
-    accent:"#b76e79", headerBg:"linear-gradient(135deg,rgba(183,110,121,0.16),rgba(183,110,121,0.28))", headerBorder:"4px solid #b76e79",
-    headerAccent:"#b76e79", headerName:"#2c1810", headerMeta:"#6a4a40", textDark:"#2c1810", textMedium:"#6a4a40", textLight:"#9a8070",
-    rowEven:"white", rowOdd:"#fdf8f4", infoBg:"#fdf2f4", infoBorder:"#f0dce0", footerBg:"#fdf2f4", footerText:"#9a8070",
-    chromeBg:"#fdf8f4", chromeBorder:"#f0dce0", chromeMuted:"#9a8070" },
+    accent:theme.colors.primary, headerBg:`linear-gradient(135deg,rgba(${theme.colors.primaryRgb},0.16),rgba(${theme.colors.primaryRgb},0.28))`, headerBorder:`4px solid ${theme.colors.primary}`,
+    headerAccent:theme.colors.primary, headerName:theme.colors.text.dark, headerMeta:theme.colors.text.medium, textDark:theme.colors.text.dark, textMedium:theme.colors.text.medium, textLight:theme.colors.text.light,
+    rowEven:"white", rowOdd:theme.colors.background.light, infoBg:theme.colors.info.background, infoBorder:theme.colors.info.border, footerBg:theme.colors.info.background, footerText:theme.colors.text.light,
+    chromeBg:theme.colors.background.light, chromeBorder:theme.colors.border.pink, chromeMuted:theme.colors.text.light },
   { id:"caring-hands", label:"Caring Hands", emoji:"🤍", structure:"dark-header", fontStyle:"sans",
-    accent:"#7ab5a8", headerBg:"#1a2a3a", headerBorder:"3px solid #7ab5a8",
-    headerAccent:"#7ab5a8", headerName:"white", headerMeta:"#8aacaa", textDark:"#1a2a3a", textMedium:"#4a6a60", textLight:"#7a9a90",
-    rowEven:"white", rowOdd:"#f4f9f8", infoBg:"#f4f8f8", infoBorder:"#e0eeec", footerBg:"white", footerText:"#7a9a90",
-    totalBg:"#1a2a3a", totalText:"white",
-    chromeBg:"#f4f8f8", chromeBorder:"#e0eeec", chromeMuted:"#7a9a90" },
+    accent:theme.colors.caringHands.accent, headerBg:theme.colors.caringHands.headerBg, headerBorder:`3px solid ${theme.colors.caringHands.accent}`,
+    headerAccent:theme.colors.caringHands.accent, headerName:"white", headerMeta:theme.colors.caringHands.headerMeta, textDark:theme.colors.caringHands.textDark, textMedium:theme.colors.caringHands.textMedium, textLight:theme.colors.caringHands.textLight,
+    rowEven:"white", rowOdd:theme.colors.caringHands.rowOdd, infoBg:theme.colors.caringHands.infoBg, infoBorder:theme.colors.caringHands.infoBorder, footerBg:"white", footerText:theme.colors.caringHands.textLight,
+    totalBg:theme.colors.caringHands.headerBg, totalText:"white",
+    chromeBg:theme.colors.caringHands.chromeBg, chromeBorder:theme.colors.caringHands.chromeBorder, chromeMuted:theme.colors.caringHands.textLight },
   { id:"garden", label:"Garden", emoji:"🌿", structure:"botanical", fontStyle:"sans",
-    accent:"#5a8a5a", headerBg:"linear-gradient(135deg,#2d4a2d,#3d6b3d)", headerBorder:"none",
-    headerAccent:"#a8d8a0", headerName:"#e8f5e4", headerMeta:"#a8c8a0", textDark:"#2d4a2d", textMedium:"#6a8a60", textLight:"#7a9a70",
-    rowEven:"#fffef8", rowOdd:"#f4f8f0", infoBg:"#f6fbf4", infoBorder:"#d0e8c8", footerBg:"#f0f8ec", footerText:"#7a9a70",
-    dividerBg:"#5a8a5a", dividerText:"#c8e8c0",
-    chromeBg:"#f6fbf4", chromeBorder:"#d0e8c8", chromeMuted:"#7a9a70" },
+    accent:theme.colors.garden.accent, headerBg:theme.colors.garden.headerBg, headerBorder:"none",
+    headerAccent:theme.colors.garden.headerAccent, headerName:theme.colors.garden.headerName, headerMeta:theme.colors.garden.headerMeta, textDark:theme.colors.garden.textDark, textMedium:theme.colors.garden.textMedium, textLight:theme.colors.garden.textLight,
+    rowEven:theme.colors.garden.rowEven, rowOdd:theme.colors.garden.rowOdd, infoBg:theme.colors.garden.infoBg, infoBorder:theme.colors.garden.infoBorder, footerBg:theme.colors.garden.footerBg, footerText:theme.colors.garden.footerText,
+    dividerBg:theme.colors.garden.dividerBg, dividerText:theme.colors.garden.dividerText,
+    chromeBg:theme.colors.garden.chromeBg, chromeBorder:theme.colors.garden.chromeBorder, chromeMuted:theme.colors.garden.chromeMuted },
   { id:"golden-hour", label:"Golden Hour", emoji:"☀️", structure:"light-header", fontStyle:"serif",
-    accent:"#c4922a", headerBg:"linear-gradient(135deg,rgba(196,146,42,0.32),rgba(196,146,42,0.50))", headerBorder:"4px solid #c4922a",
-    headerAccent:"#c4922a", headerName:"#3a2600", headerMeta:"#7a5020", textDark:"#3a2600", textMedium:"#7a5020", textLight:"#a87840",
-    rowEven:"white", rowOdd:"#fdf8ee", infoBg:"#fdf5e8", infoBorder:"#e8d8b0", footerBg:"#fdf5e8", footerText:"#a87840",
-    chromeBg:"#fdf8ee", chromeBorder:"#e8d8b0", chromeMuted:"#a87840" },
+    accent:theme.colors.goldenHour.accent, headerBg:theme.colors.goldenHour.headerBg, headerBorder:`4px solid ${theme.colors.goldenHour.accent}`,
+    headerAccent:theme.colors.goldenHour.headerAccent, headerName:theme.colors.goldenHour.headerName, headerMeta:theme.colors.goldenHour.headerMeta, textDark:theme.colors.goldenHour.textDark, textMedium:theme.colors.goldenHour.textMedium, textLight:theme.colors.goldenHour.textLight,
+    rowEven:theme.colors.goldenHour.rowEven, rowOdd:theme.colors.goldenHour.rowOdd, infoBg:theme.colors.goldenHour.infoBg, infoBorder:theme.colors.goldenHour.infoBorder, footerBg:theme.colors.goldenHour.footerBg, footerText:theme.colors.goldenHour.footerText,
+    chromeBg:theme.colors.goldenHour.chromeBg, chromeBorder:theme.colors.goldenHour.chromeBorder, chromeMuted:theme.colors.goldenHour.chromeMuted },
   { id:"lavender-eve", label:"Lavender Eve", emoji:"🌙", structure:"dark-header", fontStyle:"sans",
     accent:"#9b7fd4", headerBg:"#2a1f3d", headerBorder:"3px solid #9b7fd4",
     headerAccent:"#c4b0f0", headerName:"white", headerMeta:"#b0a0d0", textDark:"#2a1f3d", textMedium:"#5a4a70", textLight:"#8a7aa0",
@@ -287,7 +288,7 @@ const defaultConfig = {
   clientEmail:    "billing@clientagency.com",
   accountantEmail:"accountant@cpa.com",
   template:       "morning-light",
-  accent:         "#b76e79",
+  accent:         theme.colors.primary,
   invoiceNote:    "Thank you for your business.",
   saveFolder:     deriveSaveFolder("Jane Doe"),
   clients:        [],

@@ -325,7 +325,8 @@ export default $config({
       evaluationPeriods: 2, // Requires 2 consecutive 5-min periods (10 min total) to alarm
       threshold: 1, // 1% error rate
       actionsEnabled: true,
-      alarmActions: [alarmTopic.arn],
+      alarmActions: [alarmTopic.arn], // Notify when alarm triggers
+      okActions: [alarmTopic.arn], // Notify when alarm recovers
       alarmDescription: "Alerts when Lambda error rate exceeds 1%",
       treatMissingData: "notBreaching", // Don't alarm if no data (e.g., no invocations)
 
@@ -369,7 +370,8 @@ export default $config({
       evaluationPeriods: 2, // Requires 2 consecutive 5-min periods (10 min total) to alarm
       threshold: 1, // 1% error rate
       actionsEnabled: true,
-      alarmActions: [alarmTopic.arn],
+      alarmActions: [alarmTopic.arn], // Notify when alarm triggers
+      okActions: [alarmTopic.arn], // Notify when alarm recovers
       alarmDescription: "Alerts when API Gateway 5xx error rate exceeds 1%",
       treatMissingData: "notBreaching", // Don't alarm if no data (e.g., no API requests)
 

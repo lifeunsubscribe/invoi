@@ -39,6 +39,24 @@
 import { useCallback } from 'react';
 
 /**
+ * Environment helpers - wrapped in an object to enable mocking in tests.
+ * This pattern allows tests to override environment checks without touching import.meta.env.
+ */
+export const env = {
+  /**
+   * Check if the app is running in production mode.
+   * @returns {boolean} True if running in production mode
+   */
+  isProduction: () => import.meta.env.PROD,
+
+  /**
+   * Check if the app is running in development mode.
+   * @returns {boolean} True if running in development mode
+   */
+  isDevelopment: () => import.meta.env.DEV,
+};
+
+/**
  * Get the current authentication token for API requests.
  *
  * @returns {string|null} JWT token for Authorization header, or null if not authenticated
@@ -47,7 +65,7 @@ import { useCallback } from 'react';
  * For now, returns a stub token to unblock ProfilePage API integration.
  * The backend config.py currently has stub validation that checks for header presence.
  */
-function getAuthTokenImpl() {
+export function getAuthTokenImpl() {
   // TODO [Phase 1]: Replace stub with real token retrieval
   // Real implementation will be:
   // - For Cognito: fetchAuthSession().then(session => session.tokens?.idToken?.toString())
@@ -55,7 +73,7 @@ function getAuthTokenImpl() {
 
   // PRODUCTION SAFEGUARD: Prevent stub authentication from reaching production
   // This check ensures the app fails fast if deployed to production without real auth
-  if (import.meta.env.PROD) {
+  if (env.isProduction()) {
     throw new Error(
       'PRODUCTION ERROR: Stub authentication is not allowed in production. ' +
       'Real Cognito/Auth0 integration must be implemented before production deployment. ' +

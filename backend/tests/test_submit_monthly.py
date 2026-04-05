@@ -275,6 +275,163 @@ class TestSubmitMonthly:
         assert body['sent'] == []
         assert body['status'] == 'draft'  # Status should remain draft since email failed
 
+    def test_submit_monthly_idempotency_returns_existing_report(self):
+        """POST for already-generated report should return existing report without regeneration"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'year': 2026,
+                'month': 3,
+                'send': False
+            })
+        }
+
+        # Mock user config
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'rate': 28.00,
+            'template': 'morning-light'
+        }
+
+        # Mock existing report
+        existing_report = {
+            'userId': 'user-123',
+            'invoiceId': 'RPT-2026-03',
+            'type': 'monthly',
+            'status': 'sent',
+            'year': 2026,
+            'month': 3,
+            'monthLabel': 'March 2026',
+            'weekCount': 4,
+            'totalHours': 160,
+            'rate': 28.00,
+            'totalPay': 4480.00,
+            'pdfKey': 'users/user-123/reports/RPT-2026-03.pdf',
+            'createdAt': '2026-03-31T10:00:00Z'
+        }
+
+        with patch('functions.submit_monthly.get_user', return_value=mock_user):
+            with patch('functions.submit_monthly.get_invoice', return_value=existing_report):
+                with patch('functions.submit_monthly.query_invoices') as mock_query:
+                    with patch('functions.submit_monthly.generate_monthly_report') as mock_generate:
+                        response = handler(event, {})
+
+        # Should return 200 with existing report data
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+
+        # Verify existing report data is returned
+        assert body['reportId'] == 'RPT-2026-03'
+        assert body['s3Key'] == 'users/user-123/reports/RPT-2026-03.pdf'
+        assert body['monthLabel'] == 'March 2026'
+        assert body['totalHours'] == 160
+        assert body['totalPay'] == 4480.00
+        assert body['weekCount'] == 4
+        assert body['status'] == 'sent'
+        assert body['alreadyExists'] is True
+
+        # Verify PDF was NOT regenerated (functions not called)
+        mock_query.assert_not_called()
+        mock_generate.assert_not_called()
+
+    def test_submit_monthly_partial_corrupted_report_regenerates(self):
+        """POST for partial/corrupted existing report should regenerate the report with complete data"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'year': 2026,
+                'month': 3,
+                'send': False
+            })
+        }
+
+        # Mock user config
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'rate': 28.00,
+            'template': 'morning-light',
+            'signatureFont': 'Dancing Script'
+        }
+
+        # Mock partial/corrupted existing report - missing critical fields
+        # This simulates a scenario where the database write was interrupted
+        # or the report was created before certain fields were added
+        corrupted_report = {
+            'userId': 'user-123',
+            'invoiceId': 'RPT-2026-03',
+            'type': 'monthly',
+            'pdfKey': 'users/user-123/reports/RPT-2026-03.pdf',
+            'createdAt': '2026-03-31T10:00:00Z'
+            # Missing: status, year, month, monthLabel, weekCount, totalHours, totalPay
+        }
+
+        # Mock weekly invoices for regeneration
+        mock_weekly_invoices = [
+            {
+                'invoiceId': 'INV-20260301',
+                'weekStart': '2026-03-01',
+                'weekEnd': '2026-03-07',
+                'totalHours': 40
+            },
+            {
+                'invoiceId': 'INV-20260308',
+                'weekStart': '2026-03-08',
+                'weekEnd': '2026-03-14',
+                'totalHours': 38
+            }
+        ]
+
+        # Mock PDF generation
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        with patch.dict(os.environ, {
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_monthly.get_user', return_value=mock_user):
+                with patch('functions.submit_monthly.get_invoice', return_value=corrupted_report):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices) as mock_query:
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes) as mock_generate:
+                            with patch('functions.submit_monthly.save_pdf_to_s3') as mock_save_pdf:
+                                with patch('functions.submit_monthly.put_invoice') as mock_put_invoice:
+                                    response = handler(event, {})
+
+        # Should return 200 with regenerated report data
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+
+        # Verify regenerated report has complete data (not None values)
+        assert body['reportId'] == 'RPT-2026-03'
+        assert body['s3Key'] == 'users/user-123/reports/RPT-2026-03.pdf'
+        assert body['monthLabel'] == 'March 2026'
+        assert body['totalHours'] == 78  # 40 + 38
+        assert body['totalPay'] == 2184.00  # 78 * 28.00
+        assert body['weekCount'] == 2
+        assert body['status'] == 'draft'
+
+        # Verify PDF WAS regenerated (corrupted report triggers regeneration)
+        mock_query.assert_called_once()
+        mock_generate.assert_called_once()
+        mock_save_pdf.assert_called_once()
+        mock_put_invoice.assert_called_once()
+
     def test_lambda_response_has_no_cors_headers(self):
         """Lambda responses should not include CORS headers (API Gateway handles them)"""
         event = {

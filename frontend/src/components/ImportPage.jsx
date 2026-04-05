@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { getAuthToken } from "../auth.jsx";
+import theme from "../theme.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -36,7 +37,7 @@ export default function ImportPage({ config, onBack }) {
   const [results, setResults] = useState(null);
   const fileInputRef = useRef(null);
 
-  const accent = config?.accent || "#b76e79";
+  const accent = config?.accent || theme.colors.primary;
 
   /**
    * Parse folder contents and match PDFs with sidecar JSON files
