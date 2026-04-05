@@ -1,5 +1,13 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { getAuthToken } from "./auth.jsx";
+import { useGetAuthToken, useIsAuthenticated } from "./auth.jsx";
+import HistoryPage from "./components/HistoryPage.jsx";
+import LandingPage from "./components/LandingPage.jsx";
+import ImportPage from "./components/ImportPage.jsx";
+import PrivacyPolicy from "./components/PrivacyPolicy.jsx";
+import TermsOfService from "./components/TermsOfService.jsx";
+import WelcomePage from "./components/WelcomePage.jsx";
+import Tooltip from "./components/Tooltip.jsx";
+import theme from "./theme.js";
 
 // API configuration - VITE_API_URL is injected by SST during deployment
 // For local development with `npx sst dev`, the URL is automatically provided
@@ -17,27 +25,27 @@ if (!API_BASE && import.meta.env.DEV) {
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 const TEMPLATES = [
   { id:"morning-light", label:"Morning Light", emoji:"🌸", structure:"light-header", fontStyle:"serif",
-    accent:"#b76e79", headerBg:"linear-gradient(135deg,rgba(183,110,121,0.16),rgba(183,110,121,0.28))", headerBorder:"4px solid #b76e79",
-    headerAccent:"#b76e79", headerName:"#2c1810", headerMeta:"#6a4a40", textDark:"#2c1810", textMedium:"#6a4a40", textLight:"#9a8070",
-    rowEven:"white", rowOdd:"#fdf8f4", infoBg:"#fdf2f4", infoBorder:"#f0dce0", footerBg:"#fdf2f4", footerText:"#9a8070",
-    chromeBg:"#fdf8f4", chromeBorder:"#f0dce0", chromeMuted:"#9a8070" },
+    accent:theme.colors.primary, headerBg:`linear-gradient(135deg,rgba(${theme.colors.primaryRgb},0.16),rgba(${theme.colors.primaryRgb},0.28))`, headerBorder:`4px solid ${theme.colors.primary}`,
+    headerAccent:theme.colors.primary, headerName:theme.colors.text.dark, headerMeta:theme.colors.text.medium, textDark:theme.colors.text.dark, textMedium:theme.colors.text.medium, textLight:theme.colors.text.light,
+    rowEven:"white", rowOdd:theme.colors.background.light, infoBg:theme.colors.info.background, infoBorder:theme.colors.info.border, footerBg:theme.colors.info.background, footerText:theme.colors.text.light,
+    chromeBg:theme.colors.background.light, chromeBorder:theme.colors.border.pink, chromeMuted:theme.colors.text.light },
   { id:"caring-hands", label:"Caring Hands", emoji:"🤍", structure:"dark-header", fontStyle:"sans",
-    accent:"#7ab5a8", headerBg:"#1a2a3a", headerBorder:"3px solid #7ab5a8",
-    headerAccent:"#7ab5a8", headerName:"white", headerMeta:"#8aacaa", textDark:"#1a2a3a", textMedium:"#4a6a60", textLight:"#7a9a90",
-    rowEven:"white", rowOdd:"#f4f9f8", infoBg:"#f4f8f8", infoBorder:"#e0eeec", footerBg:"white", footerText:"#7a9a90",
-    totalBg:"#1a2a3a", totalText:"white",
-    chromeBg:"#f4f8f8", chromeBorder:"#e0eeec", chromeMuted:"#7a9a90" },
+    accent:theme.colors.caringHands.accent, headerBg:theme.colors.caringHands.headerBg, headerBorder:`3px solid ${theme.colors.caringHands.accent}`,
+    headerAccent:theme.colors.caringHands.accent, headerName:"white", headerMeta:theme.colors.caringHands.headerMeta, textDark:theme.colors.caringHands.textDark, textMedium:theme.colors.caringHands.textMedium, textLight:theme.colors.caringHands.textLight,
+    rowEven:"white", rowOdd:theme.colors.caringHands.rowOdd, infoBg:theme.colors.caringHands.infoBg, infoBorder:theme.colors.caringHands.infoBorder, footerBg:"white", footerText:theme.colors.caringHands.textLight,
+    totalBg:theme.colors.caringHands.headerBg, totalText:"white",
+    chromeBg:theme.colors.caringHands.chromeBg, chromeBorder:theme.colors.caringHands.chromeBorder, chromeMuted:theme.colors.caringHands.textLight },
   { id:"garden", label:"Garden", emoji:"🌿", structure:"botanical", fontStyle:"sans",
-    accent:"#5a8a5a", headerBg:"linear-gradient(135deg,#2d4a2d,#3d6b3d)", headerBorder:"none",
-    headerAccent:"#a8d8a0", headerName:"#e8f5e4", headerMeta:"#a8c8a0", textDark:"#2d4a2d", textMedium:"#6a8a60", textLight:"#7a9a70",
-    rowEven:"#fffef8", rowOdd:"#f4f8f0", infoBg:"#f6fbf4", infoBorder:"#d0e8c8", footerBg:"#f0f8ec", footerText:"#7a9a70",
-    dividerBg:"#5a8a5a", dividerText:"#c8e8c0",
-    chromeBg:"#f6fbf4", chromeBorder:"#d0e8c8", chromeMuted:"#7a9a70" },
+    accent:theme.colors.garden.accent, headerBg:theme.colors.garden.headerBg, headerBorder:"none",
+    headerAccent:theme.colors.garden.headerAccent, headerName:theme.colors.garden.headerName, headerMeta:theme.colors.garden.headerMeta, textDark:theme.colors.garden.textDark, textMedium:theme.colors.garden.textMedium, textLight:theme.colors.garden.textLight,
+    rowEven:theme.colors.garden.rowEven, rowOdd:theme.colors.garden.rowOdd, infoBg:theme.colors.garden.infoBg, infoBorder:theme.colors.garden.infoBorder, footerBg:theme.colors.garden.footerBg, footerText:theme.colors.garden.footerText,
+    dividerBg:theme.colors.garden.dividerBg, dividerText:theme.colors.garden.dividerText,
+    chromeBg:theme.colors.garden.chromeBg, chromeBorder:theme.colors.garden.chromeBorder, chromeMuted:theme.colors.garden.chromeMuted },
   { id:"golden-hour", label:"Golden Hour", emoji:"☀️", structure:"light-header", fontStyle:"serif",
-    accent:"#c4922a", headerBg:"linear-gradient(135deg,rgba(196,146,42,0.32),rgba(196,146,42,0.50))", headerBorder:"4px solid #c4922a",
-    headerAccent:"#c4922a", headerName:"#3a2600", headerMeta:"#7a5020", textDark:"#3a2600", textMedium:"#7a5020", textLight:"#a87840",
-    rowEven:"white", rowOdd:"#fdf8ee", infoBg:"#fdf5e8", infoBorder:"#e8d8b0", footerBg:"#fdf5e8", footerText:"#a87840",
-    chromeBg:"#fdf8ee", chromeBorder:"#e8d8b0", chromeMuted:"#a87840" },
+    accent:theme.colors.goldenHour.accent, headerBg:theme.colors.goldenHour.headerBg, headerBorder:`4px solid ${theme.colors.goldenHour.accent}`,
+    headerAccent:theme.colors.goldenHour.headerAccent, headerName:theme.colors.goldenHour.headerName, headerMeta:theme.colors.goldenHour.headerMeta, textDark:theme.colors.goldenHour.textDark, textMedium:theme.colors.goldenHour.textMedium, textLight:theme.colors.goldenHour.textLight,
+    rowEven:theme.colors.goldenHour.rowEven, rowOdd:theme.colors.goldenHour.rowOdd, infoBg:theme.colors.goldenHour.infoBg, infoBorder:theme.colors.goldenHour.infoBorder, footerBg:theme.colors.goldenHour.footerBg, footerText:theme.colors.goldenHour.footerText,
+    chromeBg:theme.colors.goldenHour.chromeBg, chromeBorder:theme.colors.goldenHour.chromeBorder, chromeMuted:theme.colors.goldenHour.chromeMuted },
   { id:"lavender-eve", label:"Lavender Eve", emoji:"🌙", structure:"dark-header", fontStyle:"sans",
     accent:"#9b7fd4", headerBg:"#2a1f3d", headerBorder:"3px solid #9b7fd4",
     headerAccent:"#c4b0f0", headerName:"white", headerMeta:"#b0a0d0", textDark:"#2a1f3d", textMedium:"#5a4a70", textLight:"#8a7aa0",
@@ -132,8 +140,15 @@ const ALL_VITALS = [
 const DEFAULT_ENABLED_VITALS = ["temperature","bpSystolic","bpDiastolic","weight","pulse","o2sat"];
 
 const OCCUPATIONS = [
-  {id:"",                label:"General Service Provider"},
-  {id:"home-health-aide",label:"Home Health Aide"},
+  {id:"",                 label:"General Service Provider"},
+  {id:"home-health-aide", label:"Home Health Aide"},
+  {id:"tutor-instructor", label:"Tutor / Instructor"},
+  {id:"personal-trainer", label:"Personal Trainer"},
+  {id:"house-cleaner",    label:"House Cleaner"},
+  {id:"pet-sitter",       label:"Pet Sitter / Dog Walker"},
+  {id:"handyperson",      label:"Handyperson"},
+  {id:"caregiver",        label:"Caregiver"},
+  {id:"other",            label:"Other"},
 ];
 
 // Occupation-specific labels. Falls back to default ("") for anything not overridden.
@@ -147,7 +162,8 @@ const OCC_LABELS = {
     medsHeader: "Supplies / Materials",
     recipientCardTitle: "Service Recipient",
     recipientCardDesc: "The person or entity you provide service to.",
-    invoiceTitle: "Contractor Invoice",
+    invoiceTitle: "Service Invoice",
+    clientFieldLabel: "Client",
   },
   "home-health-aide": {
     recipientName: "Patient Name",
@@ -159,12 +175,108 @@ const OCC_LABELS = {
     recipientCardTitle: "Service Recipient",
     recipientCardDesc: "The patient you provide care for. Shows on invoices and logs.",
     invoiceTitle: "Home Health Invoice",
+    clientFieldLabel: "Agency",
+  },
+  "tutor-instructor": {
+    recipientName: "Student Name",
+    recipientAddress: "Student Address",
+    objective: "Learning Objectives",
+    objectivePlaceholder: "e.g., improve reading comprehension, SAT prep, master algebra",
+    vitalsHeader: "Metrics",
+    medsHeader: "Materials",
+    recipientCardTitle: "Student",
+    recipientCardDesc: "The student you teach.",
+    invoiceTitle: "Tutoring Invoice",
+    clientFieldLabel: "School / Family",
+  },
+  "personal-trainer": {
+    recipientName: "Client Name",
+    recipientAddress: "Client Address",
+    objective: "Fitness Goals",
+    objectivePlaceholder: "e.g., weight loss, muscle gain, marathon training, improve flexibility",
+    vitalsHeader: "Metrics",
+    medsHeader: "Equipment / Supplements",
+    recipientCardTitle: "Client",
+    recipientCardDesc: "The client you train.",
+    invoiceTitle: "Training Invoice",
+    clientFieldLabel: "Gym / Client",
+  },
+  "house-cleaner": {
+    recipientName: "Property Name",
+    recipientAddress: "Property Address",
+    objective: "Service Scope",
+    objectivePlaceholder: "e.g., deep clean kitchen, vacuum all rooms, laundry, windows",
+    vitalsHeader: "Metrics",
+    medsHeader: "Supplies",
+    recipientCardTitle: "Property",
+    recipientCardDesc: "The property you clean.",
+    invoiceTitle: "Cleaning Invoice",
+    clientFieldLabel: "Client",
+  },
+  "pet-sitter": {
+    recipientName: "Pet Name(s)",
+    recipientAddress: "Owner Address",
+    objective: "Care Instructions",
+    objectivePlaceholder: "e.g., feed twice daily, 30min walks, medications, special needs",
+    vitalsHeader: "Metrics",
+    medsHeader: "Supplies / Meds",
+    recipientCardTitle: "Pet(s)",
+    recipientCardDesc: "The pet(s) you care for.",
+    invoiceTitle: "Pet Care Invoice",
+    clientFieldLabel: "Pet Owner",
+  },
+  "handyperson": {
+    recipientName: "Property Name",
+    recipientAddress: "Property Address",
+    objective: "Work Scope",
+    objectivePlaceholder: "e.g., fix leaky faucet, install shelves, repair drywall, paint bedroom",
+    vitalsHeader: "Metrics",
+    medsHeader: "Materials",
+    recipientCardTitle: "Property",
+    recipientCardDesc: "The property you service.",
+    invoiceTitle: "Service Invoice",
+    clientFieldLabel: "Client",
+  },
+  "caregiver": {
+    recipientName: "Care Recipient Name",
+    recipientAddress: "Care Recipient Address",
+    objective: "Care Objectives",
+    objectivePlaceholder: "e.g., companionship, meal preparation, mobility assistance, medication reminders",
+    vitalsHeader: "Vitals",
+    medsHeader: "Medications",
+    recipientCardTitle: "Care Recipient",
+    recipientCardDesc: "The person you provide care for.",
+    invoiceTitle: "Caregiving Invoice",
+    clientFieldLabel: "Family",
+  },
+  "other": {
+    recipientName: "Recipient Name",
+    recipientAddress: "Recipient Address",
+    objective: "Service Objective",
+    objectivePlaceholder: "e.g., goals, key deliverables, recurring tasks",
+    vitalsHeader: "Metrics",
+    medsHeader: "Materials",
+    recipientCardTitle: "Service Recipient",
+    recipientCardDesc: "The person or entity you provide service to.",
+    invoiceTitle: "Service Invoice",
+    clientFieldLabel: "Client",
   },
 };
 
 function getOccLabels(config) {
   const occ = config.occupation || "";
-  return OCC_LABELS[occ] || OCC_LABELS[""];
+  const labels = OCC_LABELS[occ] || OCC_LABELS[""];
+  // Ensure clientFieldLabel always has a fallback value
+  return {
+    ...labels,
+    clientFieldLabel: labels.clientFieldLabel || "Client",
+  };
+}
+
+// Helper to determine if occupation requires health-specific fields (vitals, medications)
+function isHealthOccupation(occupation) {
+  const healthOccupations = ["home-health-aide", "caregiver"];
+  return healthOccupations.includes(occupation || "");
 }
 
 const defaultConfig = {
@@ -172,14 +284,12 @@ const defaultConfig = {
   address:        "123 Main Street, Denver, CO 80201",
   personalEmail:  "jane@email.com",
   rate:           18.0,
-  clientName:     "Sunrise Home Health Agency",
+  clientName:     "Client Agency",
   clientEmail:    "billing@clientagency.com",
   accountantEmail:"accountant@cpa.com",
-  patientName:    "",
-  patientAddress: "",
   template:       "morning-light",
-  accent:         "#b76e79",
-  invoiceNote:    "Thank you for the privilege of caring for your clients.",
+  accent:         theme.colors.primary,
+  invoiceNote:    "Thank you for your business.",
   saveFolder:     deriveSaveFolder("Jane Doe"),
   clients:        [],
   activeClientId: "",
@@ -192,7 +302,20 @@ const defaultConfig = {
 function getActiveClient(config) {
   const clients = config.clients || [];
   const active = clients.find(c => c.id === config.activeClientId);
-  return active || clients[0] || { id:"", name:"", address:"", objective:"", defaultShift:{start:"09:00",end:"17:00"}, meds:[] };
+  const client = active || clients[0] || { id:"", name:"", address:"", objective:"", defaultShift:{start:"09:00",end:"17:00"}, meds:[] };
+
+  // Migration: handle legacy patientName/patientAddress fields
+  // Return a new object to avoid mutating the shared reference
+  const needsMigration = (client.patientName && !client.name) || (client.patientAddress && !client.address);
+  if (needsMigration) {
+    return {
+      ...client,
+      name: client.name || client.patientName,
+      address: client.address || client.patientAddress,
+    };
+  }
+
+  return client;
 }
 
 function makeClientId() { return "client-" + Date.now(); }
@@ -451,10 +574,12 @@ function TemplateLightHeader({ config, hours, week, totalHours, totalPay, theme 
   const t = theme || getTheme("morning-light");
   const isSerif = t.fontStyle === "serif";
   const headFont = isSerif ? "'Georgia',serif" : "sans-serif";
+  const activeClient = getActiveClient(config);
+  const occLabels = getOccLabels(config);
   return (
     <div style={{fontFamily:headFont,background:"white",width:"100%",minHeight:"100%"}}>
       <div style={{background:t.headerBg,borderBottom:t.headerBorder,padding:"34px 38px 28px",position:"relative"}}>
-        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7,fontFamily:"sans-serif"}}><span style={{fontSize:15}}>{t.emoji}</span> {getOccLabels(config).invoiceTitle}</div>
+        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7,fontFamily:"sans-serif"}}><span style={{fontSize:15}}>{t.emoji}</span> {occLabels.invoiceTitle}</div>
         <h1 style={{margin:0,fontSize:27,fontWeight:700,color:t.headerName,letterSpacing:-0.5}}>{config.name}</h1>
         <p style={{margin:"7px 0 3px",fontSize:13,color:t.headerMeta,fontFamily:"sans-serif"}}>{config.address}</p>
         <p style={{margin:0,fontSize:13,color:t.headerMeta,fontFamily:"sans-serif"}}>{config.personalEmail}</p>
@@ -468,9 +593,9 @@ function TemplateLightHeader({ config, hours, week, totalHours, totalPay, theme 
         <div><div style={{fontSize:10,fontFamily:"sans-serif",letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Billed To</div>
           <div style={{fontSize:15,fontWeight:700,color:t.textDark,fontFamily:"sans-serif"}}>{config.clientName}</div>
           <div style={{fontSize:13,fontFamily:"sans-serif",color:t.textMedium,marginTop:3}}>{config.clientEmail}</div></div>
-        {config.patientName && <div style={{marginRight:52}}><div style={{fontSize:10,fontFamily:"sans-serif",letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Service Recipient</div>
-          <div style={{fontSize:15,fontWeight:700,color:t.textDark,fontFamily:"sans-serif"}}>{config.patientName}</div>
-          {config.patientAddress && <div style={{fontSize:13,fontFamily:"sans-serif",color:t.textMedium,marginTop:3}}>{config.patientAddress}</div>}</div>}
+        {activeClient.name && <div style={{marginRight:52}}><div style={{fontSize:10,fontFamily:"sans-serif",letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>{occLabels.recipientCardTitle}</div>
+          <div style={{fontSize:15,fontWeight:700,color:t.textDark,fontFamily:"sans-serif"}}>{activeClient.name}</div>
+          {activeClient.address && <div style={{fontSize:13,fontFamily:"sans-serif",color:t.textMedium,marginTop:3}}>{activeClient.address}</div>}</div>}
         <div><div style={{fontSize:10,fontFamily:"sans-serif",letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Week Of</div>
           <div style={{fontSize:14,color:t.textDark,fontFamily:"sans-serif"}}>{week.start} – {week.end}</div></div>
       </div>
@@ -489,10 +614,12 @@ function TemplateLightHeader({ config, hours, week, totalHours, totalPay, theme 
 
 function TemplateDarkHeader({ config, hours, week, totalHours, totalPay, theme }) {
   const t = theme || getTheme("caring-hands");
+  const activeClient = getActiveClient(config);
+  const occLabels = getOccLabels(config);
   return (
     <div style={{fontFamily:"sans-serif",background:"white",width:"100%",minHeight:"100%"}}>
       <div style={{background:t.headerBg,padding:"34px 38px 28px",position:"relative"}}>
-        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:15}}>{t.emoji}</span> {getOccLabels(config).invoiceTitle}</div>
+        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:15}}>{t.emoji}</span> {occLabels.invoiceTitle}</div>
         <div style={{fontSize:27,fontWeight:700,color:t.headerName,marginBottom:7}}>{config.name}</div>
         <div style={{fontSize:13,color:t.headerMeta}}>{config.address}</div>
         <div style={{fontSize:13,color:t.headerMeta,marginTop:2}}>{config.personalEmail}</div>
@@ -507,9 +634,9 @@ function TemplateDarkHeader({ config, hours, week, totalHours, totalPay, theme }
         <div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Billed To</div>
           <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{config.clientName}</div>
           <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{config.clientEmail}</div></div>
-        {config.patientName && <div style={{marginRight:52}}><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Service Recipient</div>
-          <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{config.patientName}</div>
-          {config.patientAddress && <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{config.patientAddress}</div>}</div>}
+        {activeClient.name && <div style={{marginRight:52}}><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>{occLabels.recipientCardTitle}</div>
+          <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{activeClient.name}</div>
+          {activeClient.address && <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{activeClient.address}</div>}</div>}
         <div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Service Period</div>
           <div style={{fontSize:14,color:t.textDark}}>{week.start} – {week.end}</div></div>
       </div>
@@ -527,10 +654,12 @@ function TemplateDarkHeader({ config, hours, week, totalHours, totalPay, theme }
 
 function TemplateBotanical({ config, hours, week, totalHours, totalPay, theme }) {
   const t = theme || getTheme("garden");
+  const activeClient = getActiveClient(config);
+  const occLabels = getOccLabels(config);
   return (
     <div style={{fontFamily:"sans-serif",background:t.rowEven,width:"100%",minHeight:"100%"}}>
       <div style={{background:t.headerBg,padding:"34px 38px 28px",position:"relative"}}>
-        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:15}}>{t.emoji}</span> {getOccLabels(config).invoiceTitle}</div>
+        <div style={{fontSize:13,color:t.headerAccent,letterSpacing:2.5,textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:15}}>{t.emoji}</span> {occLabels.invoiceTitle}</div>
         <div style={{fontSize:27,fontWeight:500,color:t.headerName,letterSpacing:0.5}}>{config.name}</div>
         <div style={{fontSize:13,color:t.headerMeta,marginTop:6}}>{config.address}</div>
         <div style={{fontSize:13,color:t.headerMeta,marginTop:2}}>{config.personalEmail}</div>
@@ -545,9 +674,9 @@ function TemplateBotanical({ config, hours, week, totalHours, totalPay, theme })
         <div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Billed To</div>
           <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{config.clientName}</div>
           <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{config.clientEmail}</div></div>
-        {config.patientName && <div style={{marginRight:52}}><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Service Recipient</div>
-          <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{config.patientName}</div>
-          {config.patientAddress && <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{config.patientAddress}</div>}</div>}
+        {activeClient.name && <div style={{marginRight:52}}><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>{occLabels.recipientCardTitle}</div>
+          <div style={{fontSize:15,fontWeight:700,color:t.textDark}}>{activeClient.name}</div>
+          {activeClient.address && <div style={{fontSize:13,color:t.textMedium,marginTop:3}}>{activeClient.address}</div>}</div>}
         <div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:t.accent,marginBottom:7}}>Service Week</div>
           <div style={{fontSize:14,color:t.textDark}}>{week.start} – {week.end}</div></div>
       </div>
@@ -741,18 +870,20 @@ function NotifCard({ notification, onDismiss, accent }) {
   );
 }
 
-// ── LANDING ───────────────────────────────────────────────────────────────
-function LandingPage({ config, onNav }) {
+// ── DASHBOARD (authenticated user menu) ───────────────────────────────────
+function DashboardPage({ config, onNav }) {
   const acc  = config.accent;
   const week = getWeekRange(0);
   const now  = new Date();
   const todayFormatted = now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
   const monthName = now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
   const cards = [
-    { id:"log",     emoji:"📓", label:"Daily Service Log", desc:todayFormatted,                         primary:true  },
-    { id:"weekly",  emoji:"📄", label:"Weekly Invoice",    desc:`Week of ${week.start}`,               primary:false },
-    { id:"monthly", emoji:"📊", label:"Monthly Report",    desc:monthName,                              primary:false },
-    { id:"profile", emoji:"👤", label:"Edit Profile",      desc:"Invoice & Custom Settings",     primary:false },
+    { id:"log",     emoji:"📓", label:"Daily Service Log", desc:todayFormatted,                         primary:true,  tooltip:"Record details of your work each day" },
+    { id:"weekly",  emoji:"📄", label:"Weekly Invoice",    desc:`Week of ${week.start}`,               primary:false, tooltip:"Generate a professional invoice for the week" },
+    { id:"monthly", emoji:"📊", label:"Monthly Report",    desc:monthName,                              primary:false, tooltip:"Create a summary report for tax purposes" },
+    { id:"history", emoji:"📚", label:"History",           desc:"View Past Invoices",                   primary:false, tooltip:"Browse all your sent and paid invoices" },
+    { id:"import",  emoji:"📥", label:"Import",            desc:"Import Historical Invoices",           primary:false, tooltip:"Bring in invoices from other systems" },
+    { id:"profile", emoji:"👤", label:"Edit Profile",      desc:"Invoice & Custom Settings",            primary:false, tooltip:"Update your contact info and invoice settings" },
   ];
   return (
     <Shell config={config} title={getOccLabels(config).invoiceTitle} subtitle={config.name}>
@@ -769,16 +900,18 @@ function LandingPage({ config, onNav }) {
         </div>
         <div className="landing-cards">
           {cards.map(c=>(
-            <button key={c.id} onClick={()=>onNav(c.id)} style={{width:"100%",padding:"22px 32px",borderRadius:16,cursor:"pointer",border:c.primary?`2px solid ${acc}`:"2px solid #e8ddd4",background:c.primary?`linear-gradient(135deg,${acc},${tint(acc,0.85)})`:"white",color:c.primary?"white":"#2c1810",textAlign:"left",display:"flex",alignItems:"center",gap:18,boxShadow:c.primary?`0 6px 24px ${tint(acc,0.3)}`:"0 2px 12px rgba(0,0,0,0.06)",transition:"transform 0.1s,box-shadow 0.1s"}}
-              onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=c.primary?`0 10px 28px ${tint(acc,0.35)}`:"0 6px 20px rgba(0,0,0,0.1)";}}
-              onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=c.primary?`0 6px 24px ${tint(acc,0.3)}`:"0 2px 12px rgba(0,0,0,0.06)";}}>
-              <span style={{fontSize:35}}>{c.emoji}</span>
-              <div>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:700,marginBottom:3}}>{c.label}</div>
-                <div style={{fontFamily:"sans-serif",fontSize:15,opacity:0.75}}>{c.desc}</div>
-              </div>
-              <span style={{marginLeft:"auto",fontSize:21,opacity:0.5}}>→</span>
-            </button>
+            <Tooltip key={c.id} text={c.tooltip} position="top">
+              <button onClick={()=>onNav(c.id)} style={{width:"100%",padding:"22px 32px",borderRadius:16,cursor:"pointer",border:c.primary?`2px solid ${acc}`:"2px solid #e8ddd4",background:c.primary?`linear-gradient(135deg,${acc},${tint(acc,0.85)})`:"white",color:c.primary?"white":"#2c1810",textAlign:"left",display:"flex",alignItems:"center",gap:18,boxShadow:c.primary?`0 6px 24px ${tint(acc,0.3)}`:"0 2px 12px rgba(0,0,0,0.06)",transition:"transform 0.1s,box-shadow 0.1s"}}
+                onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=c.primary?`0 10px 28px ${tint(acc,0.35)}`:"0 6px 20px rgba(0,0,0,0.1)";}}
+                onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=c.primary?`0 6px 24px ${tint(acc,0.3)}`:"0 2px 12px rgba(0,0,0,0.06)";}}>
+                <span style={{fontSize:35}}>{c.emoji}</span>
+                <div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:700,marginBottom:3}}>{c.label}</div>
+                  <div style={{fontFamily:"sans-serif",fontSize:15,opacity:0.75}}>{c.desc}</div>
+                </div>
+                <span style={{marginLeft:"auto",fontSize:21,opacity:0.5}}>→</span>
+              </button>
+            </Tooltip>
           ))}
         </div>
         {/* Clickable "Saving to" — navigates to profile folder section */}
@@ -788,6 +921,29 @@ function LandingPage({ config, onNav }) {
           onMouseLeave={e=>{e.currentTarget.style.borderColor="#d0c0b0";e.currentTarget.style.color="#9a8070";}}>
           📁 Saving to <span style={{fontFamily:"monospace"}}>{config.saveFolder}</span> — click to change
         </button>
+        {/* Beta feedback link */}
+        <a
+          href="mailto:feedback@goinvoi.com?subject=Invoi Beta Feedback"
+          style={{
+            fontSize:13,
+            color:"#9a8070",
+            background:"none",
+            border:"1px solid #d0c0b0",
+            borderRadius:8,
+            padding:"7px 15px",
+            cursor:"pointer",
+            marginTop:8,
+            textDecoration:"none",
+            display:"inline-flex",
+            alignItems:"center",
+            gap:6,
+            transition:"all 0.15s"
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=acc;e.currentTarget.style.color=acc;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="#d0c0b0";e.currentTarget.style.color="#9a8070";}}
+        >
+          💬 Send Feedback
+        </a>
       </div>
     </Shell>
   );
@@ -818,6 +974,9 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
     if (d.taxEnabled === undefined) d.taxEnabled = false;
     if (d.taxRate === undefined) d.taxRate = 0;
     if (!d.taxLabel) d.taxLabel = "Sales Tax";
+    // Initialize logo settings with defaults if not present
+    if (!d.logoKey) d.logoKey = "";
+    if (!d.logoSize) d.logoSize = "medium";
     return d;
   });
   const [folderOverridden, setFolderOverridden] = useState(config.saveFolder && config.name ? config.saveFolder !== deriveSaveFolder(config.name) : false);
@@ -825,7 +984,12 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
   const [saveError, setSaveError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
   const folderRef = useRef(null);
+  const fileInputRef = useRef(null);
   const saveInProgressRef = useRef(false);
   const acc = draft.accent;
 
@@ -869,6 +1033,155 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
       return `${prefix}${sep}${year}${sep}${paddedNum}`;
     }
     return `${prefix}${sep}${paddedNum}`;
+  };
+
+  // Logo upload handlers
+  const handleLogoFile = async (file) => {
+    setLogoError(null);
+
+    // Validate file type (SVG excluded due to XSS security risk)
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+    if (!allowedTypes.includes(file.type)) {
+      setLogoError('Please upload a PNG or JPG file');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setLogoError(`File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds 5MB limit`);
+      return;
+    }
+
+    // Read file as data URL for preview
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target.result;
+      setLogoPreview(dataUrl);
+
+      // Upload to backend
+      setLogoUploading(true);
+      try {
+        const token = getAuthToken();
+        const response = await fetch(`${API_BASE}/api/logo`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token,
+          },
+          body: JSON.stringify({
+            imageData: dataUrl,
+            logoSize: draft.logoSize || 'medium'
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to upload logo');
+        }
+
+        const result = await response.json();
+        setDraft(d => ({
+          ...d,
+          logoKey: result.logoKey,
+          logoSize: result.logoSize
+        }));
+      } catch (error) {
+        console.error('Logo upload failed:', error);
+        setLogoError(error.message);
+        setLogoPreview(null);
+      } finally {
+        setLogoUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      handleLogoFile(files[0]);
+    }
+  };
+
+  const handleLogoDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleLogoInputChange = (e) => {
+    const files = e.target?.files;
+    if (files && files.length > 0) {
+      handleLogoFile(files[0]);
+    }
+  };
+
+  const handleLogoDelete = async () => {
+    setLogoError(null);
+    setLogoUploading(true);
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE}/api/logo`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': token,
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete logo');
+      }
+
+      setDraft(d => ({
+        ...d,
+        logoKey: '',
+        logoSize: 'medium'
+      }));
+      setLogoPreview(null);
+    } catch (error) {
+      console.error('Logo delete failed:', error);
+      setLogoError(error.message);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleLogoSizeChange = async (size) => {
+    // Update draft state immediately for responsive UI
+    let currentDraft;
+    setDraft(d => {
+      currentDraft = {...d, logoSize: size};
+      return currentDraft;
+    });
+
+    // Auto-save logo size preference to backend
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE}/api/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token,
+        },
+        body: JSON.stringify(currentDraft)
+      });
+
+      if (!response.ok) {
+        console.error('Failed to save logo size preference');
+      }
+    } catch (error) {
+      console.error('Error saving logo size:', error);
+    }
   };
 
   const updateClient = (field, value) => {
@@ -945,6 +1258,34 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
       setTimeout(()=>folderRef.current.scrollIntoView({ behavior:"smooth", block:"center" }), 120);
     }
   },[scrollToFolder]);
+
+  // Fetch logo from backend if user has one configured
+  useEffect(() => {
+    if (draft.logoKey && !logoPreview) {
+      const fetchLogo = async () => {
+        try {
+          const token = getAuthToken();
+          const response = await fetch(`${API_BASE}/api/logo`, {
+            method: 'GET',
+            headers: {
+              'Authorization': token,
+            }
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            setLogoPreview(result.logoData);
+          } else if (response.status !== 404) {
+            // Only log non-404 errors (404 just means no logo)
+            console.error('Failed to fetch logo:', response.status);
+          }
+        } catch (error) {
+          console.error('Error fetching logo:', error);
+        }
+      };
+      fetchLogo();
+    }
+  }, [draft.logoKey, logoPreview]);
 
   // Save profile changes to persistent storage via API
   const handleSave = async () => {
@@ -1051,18 +1392,18 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
           {/* Client & Service Recipient card */}
           <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 2px 20px rgba(0,0,0,0.07)",marginBottom:16}}>
             <div style={{background:chrome.titleBar,padding:"16px 24px"}}>
-              <div style={sectionTitleStyle}>Client & {occLabels.recipientCardTitle}</div>
+              <div style={sectionTitleStyle}>{occLabels.clientFieldLabel} & {occLabels.recipientCardTitle}</div>
               <div style={{fontSize:14,color:chrome.mutedText}}>Who you bill and who receives your services.</div>
             </div>
             <div style={{padding:"20px 24px"}}>
               {/* Client — required, always visible */}
               <div style={{marginBottom:18}}>
-                <label style={labelStyle}>Client Name <span style={{color:acc}}>*</span></label>
+                <label style={labelStyle}>{occLabels.clientFieldLabel} Name <span style={{color:acc}}>*</span></label>
                 <input value={draft.clientName} onChange={e=>updateField("clientName",e.target.value)} style={inputStyle}
                   placeholder="Person or entity that pays for services"/>
               </div>
               <div style={{marginBottom:18}}>
-                <label style={labelStyle}>Client Email <span style={{color:acc}}>*</span></label>
+                <label style={labelStyle}>{occLabels.clientFieldLabel} Email <span style={{color:acc}}>*</span></label>
                 <input value={draft.clientEmail} onChange={e=>updateField("clientEmail",e.target.value)} style={inputStyle}
                   placeholder="Billing email"/>
               </div>
@@ -1108,7 +1449,8 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                   </div>
                 </div>
 
-                {/* Medications */}
+                {/* Medications - only for health occupations */}
+                {isHealthOccupation(draft.occupation) && (
                 <div style={{marginBottom:8}}>
                   <label style={labelStyle}>{occLabels.medsHeader}</label>
                   {(activeClient.meds||[]).length === 0 && (
@@ -1150,6 +1492,7 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                     + Add {occLabels.medsHeader === "Medications" ? "Medication" : "Item"}
                   </button>
                 </div>
+                )}
 
               {/* Multi-recipient management */}
               <div style={{borderTop:"1px solid #f0e8e0",paddingTop:12,marginTop:16}}>
@@ -1189,6 +1532,174 @@ function ProfilePage({ config, onSave, onBack, scrollToFolder }) {
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Logo & Branding */}
+          <div style={{background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 2px 20px rgba(0,0,0,0.07)",marginBottom:16}}>
+            <div style={{background:chrome.titleBar,padding:"16px 24px"}}>
+              <div style={sectionTitleStyle}>Logo & Branding</div>
+              <div style={{fontSize:14,color:chrome.mutedText}}>Upload your logo to appear on all invoices and reports.</div>
+            </div>
+            <div style={{padding:"20px 24px"}}>
+              {/* Upload area */}
+              <div
+                onDragEnter={handleLogoDrag}
+                onDragLeave={handleLogoDrag}
+                onDragOver={handleLogoDrag}
+                onDrop={handleLogoDrop}
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  border: `2px dashed ${dragActive ? acc : '#d0c0b0'}`,
+                  borderRadius: 12,
+                  padding: '24px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  background: dragActive ? tint(acc, 0.05) : '#fdfaf8',
+                  transition: 'all 0.2s',
+                  marginBottom: 16
+                }}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg"
+                  onChange={handleLogoInputChange}
+                  style={{display: 'none'}}
+                />
+                {logoUploading ? (
+                  <div style={{color: '#9a8070', fontSize: 14}}>Uploading...</div>
+                ) : logoPreview ? (
+                  <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12}}>
+                    <img
+                      src={logoPreview}
+                      alt="Logo preview"
+                      style={{
+                        maxWidth: '200px',
+                        maxHeight: '120px',
+                        objectFit: 'contain'
+                      }}
+                    />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleLogoDelete(); }}
+                      style={{
+                        fontSize: 12,
+                        color: '#c07070',
+                        background: 'none',
+                        border: '1.5px solid #e0c0c0',
+                        borderRadius: 6,
+                        padding: '5px 12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Remove Logo
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{fontSize: 16, color: '#2c1810', marginBottom: 8}}>
+                      Drop logo here or click to upload
+                    </div>
+                    <div style={{fontSize: 12, color: '#9a8070'}}>
+                      PNG or JPG • At least 300×300px • Max 5MB
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Error message */}
+              {logoError && (
+                <div style={{
+                  background: '#fef0f0',
+                  border: '1.5px solid #f0c0c0',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  fontSize: 13,
+                  color: '#c07070',
+                  marginBottom: 16
+                }}>
+                  {logoError}
+                </div>
+              )}
+
+              {/* Logo size slider */}
+              {logoPreview && (
+                <div style={{marginBottom: 16}}>
+                  <label style={labelStyle}>Logo Size on Invoices</label>
+                  <div style={{display: 'flex', gap: 8, marginTop: 8}}>
+                    {['small', 'medium', 'large'].map(size => (
+                      <button
+                        key={size}
+                        onClick={() => handleLogoSizeChange(size)}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: (draft.logoSize || 'medium') === size ? `2px solid ${acc}` : '1.5px solid #e8ddd8',
+                          background: (draft.logoSize || 'medium') === size ? tint(acc, 0.1) : 'white',
+                          color: (draft.logoSize || 'medium') === size ? acc : '#6a4a40',
+                          fontSize: 13,
+                          fontWeight: (draft.logoSize || 'medium') === size ? 600 : 400,
+                          cursor: 'pointer',
+                          textTransform: 'capitalize'
+                        }}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Live preview */}
+              {logoPreview && (
+                <div>
+                  <label style={labelStyle}>Preview on Invoice</label>
+                  <div style={{
+                    background: getTheme(draft.template || 'morning-light').chromeBg,
+                    border: `1px solid ${getTheme(draft.template || 'morning-light').chromeBorder}`,
+                    borderRadius: 12,
+                    padding: '16px',
+                    marginTop: 8
+                  }}>
+                    {/* Mini invoice mockup */}
+                    <div style={{
+                      background: 'white',
+                      borderRadius: 8,
+                      padding: '12px',
+                      border: `2px solid ${getTheme(draft.template || 'morning-light').accent}`
+                    }}>
+                      <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12}}>
+                        <div>
+                          <div style={{fontSize: 13, fontWeight: 600, color: getTheme(draft.template || 'morning-light').textDark}}>
+                            {draft.name || 'Your Name'}
+                          </div>
+                          <div style={{fontSize: 10, color: getTheme(draft.template || 'morning-light').textMedium, marginTop: 2}}>
+                            Invoice #{formatInvoiceNumber(1)}
+                          </div>
+                        </div>
+                        <img
+                          src={logoPreview}
+                          alt="Logo"
+                          style={{
+                            maxWidth: draft.logoSize === 'small' ? '40px' : draft.logoSize === 'large' ? '80px' : '60px',
+                            maxHeight: draft.logoSize === 'small' ? '40px' : draft.logoSize === 'large' ? '80px' : '60px',
+                            objectFit: 'contain'
+                          }}
+                        />
+                      </div>
+                      <div style={{
+                        borderTop: `1px solid ${getTheme(draft.template || 'morning-light').chromeBorder}`,
+                        paddingTop: 8,
+                        fontSize: 9,
+                        color: getTheme(draft.template || 'morning-light').textLight
+                      }}>
+                        Invoice preview • {draft.logoSize || 'medium'} size
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1556,19 +2067,21 @@ function handleSubmitResponse(data, savedPath, emails, setNotification, setAlrea
 
   const dateStr = new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 
-  // Check for partial success: PDF saved but email failed
-  if (data.saved && data.emailError) {
+  // Check for partial success: PDF saved but email failed (Phase 3: emailWarning instead of emailError)
+  if ((data.saved || data.s3Key) && (data.emailError || data.emailWarning)) {
     setNotification({
-      saved: data.saved,
-      emailError: data.emailError
+      saved: data.saved || data.s3Key,
+      emailError: data.emailError || data.emailWarning,
+      warning: data.emailWarning  // Phase 3: separate warning field for yellow banner
     });
     setAlreadySaved(true);
     setSavedDate(dateStr);
-  } else if (data.saved || (data.sent && data.sent.length)) {
+  } else if (data.saved || data.s3Key || (data.sent && data.sent.length)) {
     // Full success - require at least one success indicator
     setNotification({
       sent: data.sent && data.sent.length ? data.sent : null,
-      saved: data.saved || savedPath
+      saved: data.saved || data.s3Key || savedPath,
+      success: data.sent && data.sent.length ? `Sent to: ${data.sent.join(', ')}` : null  // Phase 3: success message with recipients
     });
     setAlreadySaved(true);
     setSavedDate(dateStr);
@@ -1588,6 +2101,7 @@ function WeeklyPage({ config, onBack }) {
   const week  = useMemo(()=>getWeekRange(weekOffset),[weekOffset]);
   const acc   = config.accent;
   const savedPath = weeklyPath(config.saveFolder, week.invNum);
+  const occLabels = getOccLabels(config);
 
   const [hours, setHours] = useState({Monday:8,Tuesday:8,Wednesday:8,Thursday:8,Friday:8,Saturday:0,Sunday:0});
   const [hoursSource, setHoursSource] = useState({}); // {Monday: "log"|"saved"|"default"}
@@ -1685,7 +2199,7 @@ function WeeklyPage({ config, onBack }) {
       }
 
       const data = await response.json();
-      setSavedInvoicePath(data.saved);
+      setSavedInvoicePath(data.saved || data.s3Key || null);
       setAlreadySaved(true);
 
       // Generate log PDF preview
@@ -1806,6 +2320,66 @@ function WeeklyPage({ config, onBack }) {
     } catch (error) {
       console.error('Send invoice only failed:', error);
       setNotification({ error: error.message || 'Unable to send.' });
+    } finally {
+      setSubmitting(false);
+      submitInProgressRef.current = false;
+    }
+  };
+
+  /**
+   * Phase 3: Save & Send - Saves invoice and sends email in one action
+   * Skips the log review step and directly sends the invoice to client and accountant
+   */
+  const doSaveAndSend = async () => {
+    if (submitInProgressRef.current) return;
+    submitInProgressRef.current = true;
+    setSubmitting(true);
+    setNotification(null);
+    setShowConfirm(false);
+
+    try {
+      const payload = {
+        hours,
+        clientEmail,
+        accountantEmail,
+        week: { start: week.start, end: week.end, invNum: week.invNum },
+        saveOnly: false  // Phase 3: send email after PDF generation
+      };
+
+      const response = await fetch(`${API_BASE}/api/submit/weekly`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Unable to save and send invoice.');
+      }
+
+      const data = await response.json();
+
+      // Show success notification with email recipients
+      if (data.sent && data.sent.length > 0) {
+        setNotification({
+          success: `Invoice sent to: ${data.sent.join(', ')}`
+        });
+      } else if (data.emailWarning) {
+        setNotification({
+          warning: data.emailWarning
+        });
+      } else {
+        setNotification({
+          success: 'Invoice saved successfully'
+        });
+      }
+
+      setAlreadySaved(true);
+      setSavedInvoicePath(data.saved || data.s3Key || null);
+
+    } catch (error) {
+      console.error('Save and send failed:', error);
+      setNotification({ error: error.message || 'Unable to save and send invoice.' });
     } finally {
       setSubmitting(false);
       submitInProgressRef.current = false;
@@ -1970,7 +2544,7 @@ function WeeklyPage({ config, onBack }) {
 
               <div style={{flexShrink:0,marginBottom:32}}>
                 <div style={{fontSize:12,letterSpacing:2,textTransform:"uppercase",color:"#9a8070",marginBottom:6}}>Send To</div>
-                {[{label:"Client",value:clientEmail,set:setClientEmail},{label:"Accountant",value:accountantEmail,set:setAccountantEmail}].map(({label,value,set})=>(
+                {[{label:occLabels.clientFieldLabel,value:clientEmail,set:setClientEmail},{label:"Accountant",value:accountantEmail,set:setAccountantEmail}].map(({label,value,set})=>(
                   <div key={label} style={{marginBottom:7}}>
                     <div style={{fontSize:13,color:"#b0988a",marginBottom:3}}>{label}</div>
                     <input value={value} onChange={e=>set(e.target.value)}
@@ -1988,9 +2562,14 @@ function WeeklyPage({ config, onBack }) {
             {notification && <div style={{padding:"10px 16px 0"}}><NotifCard notification={notification} onDismiss={()=>setNotification(null)} accent={acc}/></div>}
             <div style={{padding:"10px 16px 14px"}}>
               {submitStep === 1 ? (<>
-                <button onClick={handleSubmit} disabled={submitting||previewing} style={{width:"100%",fontSize:16,fontWeight:700,padding:"12px 0",borderRadius:9,border:"none",background:`linear-gradient(135deg,${acc},${acc}bb)`,color:"white",cursor:(submitting||previewing)?"wait":"pointer",boxShadow:`0 3px 14px ${tint(acc,0.35)}`,opacity:(submitting||previewing)?0.7:1}}>
-                  {submitting ? "Saving..." : "Save & Continue"}
-                </button>
+                <div style={{display:"flex",gap:8,marginBottom:8}}>
+                  <button onClick={handleSubmit} disabled={submitting||previewing} style={{flex:1,fontSize:16,fontWeight:700,padding:"12px 0",borderRadius:9,border:"none",background:"white",color:acc,cursor:(submitting||previewing)?"wait":"pointer",border:`2px solid ${acc}`,opacity:(submitting||previewing)?0.7:1}}>
+                    {submitting ? "Saving..." : "Save"}
+                  </button>
+                  <button onClick={doSaveAndSend} disabled={submitting||previewing} style={{flex:1,fontSize:16,fontWeight:700,padding:"12px 0",borderRadius:9,border:"none",background:`linear-gradient(135deg,${acc},${acc}bb)`,color:"white",cursor:(submitting||previewing)?"wait":"pointer",boxShadow:`0 3px 14px ${tint(acc,0.35)}`,opacity:(submitting||previewing)?0.7:1}}>
+                    {submitting ? "Sending..." : "Save & Send"}
+                  </button>
+                </div>
                 <button onClick={doPreviewLogsOnly} disabled={submitting||previewing}
                   style={{width:"100%",fontSize:13,color:"#9a8070",background:"none",border:"none",cursor:(submitting||previewing)?"wait":"pointer",padding:"8px 0 0",textDecoration:"underline",textDecorationColor:"#d0c0b8"}}>
                   {previewing ? "Loading..." : "Continue Without Saving"}
@@ -2122,6 +2701,7 @@ function MonthlyPage({ config, onBack }) {
         weekData: weeksWithData.map(w => ({ label: w.label, hours: w.hours })),
         year: year,
         month: month + 1, // Backend expects 1-indexed month
+        send: true,  // Phase 3: send email after PDF generation
         accountantEmail: accountantEmail,
         signatureFont: signatureFont
       };
@@ -2939,8 +3519,8 @@ function DailyLogPage({ config, onBack }) {
             {shiftHours && <span style={{fontSize:14,color:acc,fontWeight:600,marginLeft:4}}>{shiftHours} hrs</span>}
           </div>
 
-          {/* Vitals card */}
-          {activeVitals.length>0&&<div style={{background:"white",borderRadius:14,border:"1px solid #e8ddd4",padding:"14px 20px",flexShrink:0}}>
+          {/* Vitals card - only for health occupations */}
+          {isHealthOccupation(config.occupation) && activeVitals.length>0&&<div style={{background:"white",borderRadius:14,border:"1px solid #e8ddd4",padding:"14px 20px",flexShrink:0}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
               <div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:"#9a8070",fontWeight:600}}>{occLabels.vitalsHeader}</div>
               <button onClick={()=>setShowVitalsModal(true)} title={`Edit ${occLabels.vitalsHeader.toLowerCase()}`} style={{fontSize:11,color:acc,background:"none",border:`1px solid ${acc}40`,borderRadius:6,padding:"2px 8px",cursor:"pointer"}}>Edit</button>
@@ -2972,7 +3552,7 @@ function DailyLogPage({ config, onBack }) {
               </div>);})}
             </div>
           </div>}
-          {showVitalsModal&&<div style={{position:"fixed",inset:0,background:"rgba(44,24,16,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:16}} onClick={e=>{if(e.target===e.currentTarget)setShowVitalsModal(false);}}>
+          {isHealthOccupation(config.occupation) && showVitalsModal&&<div style={{position:"fixed",inset:0,background:"rgba(44,24,16,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:16}} onClick={e=>{if(e.target===e.currentTarget)setShowVitalsModal(false);}}>
             <div style={{background:"white",borderRadius:16,width:380,maxWidth:"90vw",overflow:"hidden",boxShadow:"0 12px 60px rgba(0,0,0,0.25)"}}>
               <div style={{background:chrome.titleBar,padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <div><div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:acc,fontWeight:700}}>Configure</div><div style={{fontSize:16,fontWeight:700,color:"#f0e0d0"}}>{occLabels.vitalsHeader} Metrics</div></div>
@@ -3005,8 +3585,8 @@ function DailyLogPage({ config, onBack }) {
               <div style={{padding:"12px 20px",borderTop:"1px solid #f0e8e0"}}><button onClick={()=>setShowVitalsModal(false)} style={{width:"100%",fontSize:14,fontWeight:700,padding:"10px 0",borderRadius:9,border:"none",background:acc,color:"white",cursor:"pointer"}}>Done</button></div>
             </div></div>}
 
-          {/* Medications checklist */}
-          {(medChecklist.length > 0 || (activeClient.meds||[]).length > 0 || activeClient.name) && (
+          {/* Medications checklist - only for health occupations */}
+          {isHealthOccupation(config.occupation) && (medChecklist.length > 0 || (activeClient.meds||[]).length > 0 || activeClient.name) && (
             <div style={{background:"white",borderRadius:14,border:"1px solid #e8ddd4",padding:"14px 20px",flexShrink:0}}>
               <div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:"#9a8070",fontWeight:600,marginBottom:10}}>{occLabels.medsHeader}</div>
               {medChecklist.map((med, idx) => {
@@ -3116,6 +3696,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [configError, setConfigError] = useState(null);
   const [helloMessage, setHelloMessage] = useState(null); // TODO: REMOVE AFTER PHASE 0
+  const [authChecked, setAuthChecked] = useState(false);
+  const [firstRunChecked, setFirstRunChecked] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(false);
+
+  // Get stable references to auth functions to prevent useEffect re-runs
+  const getAuthToken = useGetAuthToken();
+  const isAuthenticated = useIsAuthenticated();
 
   // TODO: REMOVE AFTER PHASE 0 - Temporary test code for end-to-end verification only
   // [Phase 0] Test end-to-end browser-to-Lambda flow
@@ -3134,9 +3721,24 @@ export default function App() {
     }
   }, []);
 
-  // Fetch config on app mount
+  // [Phase 5] Check authentication status on mount
+  // This determines whether to show the marketing landing page (unauthenticated)
+  // or the dashboard (authenticated). Auth is currently stubbed - real OAuth
+  // will be implemented in Phase 1 with Cognito.
+  useEffect(() => {
+    const authenticated = isAuthenticated();
+    setAuthChecked(true);
+    if (!authenticated) {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  // Fetch config on app mount (only for authenticated users)
   // [Phase 1] API calls now include Authorization header from auth.jsx
   useEffect(() => {
+    if (!authChecked) return;
+    if (!isAuthenticated()) return;
+
     const abortController = new AbortController();
     const token = getAuthToken();
     fetch(`${API_BASE}/api/config`, {
@@ -3149,23 +3751,51 @@ export default function App() {
       .then(configData => {
         if (configData.rate != null) configData.rate = Number(configData.rate) || 0;
         setConfig({ ...defaultConfig, ...configData });
+        setConfigLoaded(true);
         setLoading(false);
       })
       .catch(err => {
         if (err.name !== 'AbortError') {
           setConfigError('Unable to load configuration');
+          setConfigLoaded(true); // Mark as loaded even on error to prevent race condition
           setLoading(false);
         }
       });
     return () => abortController.abort();
-  }, []);
+  }, [authChecked, isAuthenticated, getAuthToken]);
+
+  // [Phase 6] First-run detection - show welcome page for new users
+  // Detects if user has incomplete profile (never filled in their info)
+  useEffect(() => {
+    // Wait for auth check, config load, and ensure user is authenticated
+    if (!authChecked || !configLoaded || !isAuthenticated()) return;
+    if (firstRunChecked) return;
+
+    // Check if this is a first-time user (has empty/incomplete profile data)
+    // Backend returns empty strings for new users who haven't saved their profile yet
+    const isNewUser = !config.name || config.name.trim() === '' ||
+                      !config.email || config.email.trim() === '' ||
+                      config.rate === 0;
+
+    if (isNewUser && page === "menu") {
+      setPage("welcome");
+    }
+
+    setFirstRunChecked(true);
+  }, [authChecked, configLoaded, config, page, firstRunChecked, setPage, isAuthenticated]);
 
   const handleNav = (dest) => {
     if (dest==="profile-folder") { setScrollToFolder(true); setPage("profile"); }
     else { setScrollToFolder(false); setPage(dest); }
   };
 
-  // Show loading state while fetching config
+  const handleSignIn = () => {
+    // TODO [Phase 1]: Implement real OAuth sign-in flow with Cognito
+    // For now, this is a placeholder that will be replaced with actual OAuth
+    alert('Sign in with Google will be enabled once OAuth is configured. Check back soon!');
+  };
+
+  // Show loading state while checking auth and fetching config
   if (loading) {
     return (
       <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f9f3ee",flexDirection:"column",gap:16}}>
@@ -3173,6 +3803,19 @@ export default function App() {
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:"#2c1810"}}>Loading your profile...</div>
       </div>
     );
+  }
+
+  // [Phase 6] Legal pages accessible to both authenticated and unauthenticated users
+  // Must be checked BEFORE authentication to allow public access (required for Google OAuth approval)
+  if (page==="privacy") return <PrivacyPolicy onBack={()=>setPage("menu")}/>;
+  if (page==="terms")   return <TermsOfService onBack={()=>setPage("menu")}/>;
+
+  // [Phase 5] Show marketing landing page for unauthenticated users
+  // This is the public-facing page at goinvoi.com root that explains the product
+  // and provides "Sign in with Google" CTAs. Once OAuth is configured, users will
+  // authenticate and be redirected to the dashboard (DashboardPage below).
+  if (!isAuthenticated()) {
+    return <LandingPage onSignIn={handleSignIn} onNavigate={setPage} />;
   }
 
   // Show error banner if config fetch failed (but continue with defaults)
@@ -3196,9 +3839,12 @@ export default function App() {
     </div>
   ) : null;
 
+  if (page==="welcome") return <WelcomePage onGetStarted={()=>setPage("profile")} onNavigate={setPage} />;
   if (page==="log")     return <>{ErrorBanner}{HelloBanner}<DailyLogPage config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="weekly")  return <>{ErrorBanner}{HelloBanner}<WeeklyPage  config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="monthly") return <>{ErrorBanner}{HelloBanner}<MonthlyPage config={config} onBack={()=>setPage("menu")}/></>;
+  if (page==="history") return <>{ErrorBanner}{HelloBanner}<HistoryPage config={config} onBack={()=>setPage("menu")}/></>;
+  if (page==="import") return <>{ErrorBanner}{HelloBanner}<ImportPage config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="profile") return <>{ErrorBanner}{HelloBanner}<ProfilePage config={config} onSave={setConfig} onBack={()=>setPage("menu")} scrollToFolder={scrollToFolder}/></>;
-  return <>{ErrorBanner}{HelloBanner}<LandingPage config={config} onNav={handleNav}/></>;
+  return <>{ErrorBanner}{HelloBanner}<DashboardPage config={config} onNav={handleNav}/></>;
 }

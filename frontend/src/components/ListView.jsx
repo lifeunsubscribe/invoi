@@ -1,0 +1,1216 @@
+import { useState, useMemo, useEffect } from "react";
+import { getAuthToken } from "../auth.jsx";
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
+// Chrome styling (matches HistoryPage.jsx and CalendarView.jsx)
+const chrome = {
+  border: "#4a3828",
+  mutedText: "#a08878",
+  brightText: "#e8d8cc"
+};
+
+// Status color mapping (from CalendarView.jsx)
+const STATUS_COLORS = {
+  draft: "#9a8070",    // gray/muted
+  sent: "#4a94b4",     // blue
+  paid: "#5a8a5a",     // green
+  overdue: "#d4601a"   // red/alert
+};
+
+const STATUS_LABELS = {
+  draft: "Draft",
+  sent: "Sent",
+  paid: "Paid",
+  overdue: "Overdue"
+};
+
+/**
+ * Determine invoice status (including overdue calculation)
+ * Shared logic from CalendarView.jsx
+ */
+function getInvoiceStatus(invoice) {
+  if (invoice.status === "paid") return "paid";
+  if (invoice.status === "sent") {
+    // Check if overdue
+    if (invoice.dueDate) {
+      const dueDate = new Date(invoice.dueDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (dueDate < today) {
+        return "overdue";
+      }
+    }
+    return "sent";
+  }
+  return "draft";
+}
+
+/**
+ * Extract unique client names/IDs from invoices for filter dropdown
+ */
+function getUniqueClients(invoices) {
+  const clientSet = new Set();
+  invoices.forEach(invoice => {
+    if (invoice.clientId) {
+      clientSet.add(invoice.clientId);
+    }
+  });
+  return Array.from(clientSet).sort();
+}
+
+/**
+ * ListView - Filterable, sortable list view with multi-select for bulk actions
+ *
+ * Features:
+ * - Filter dropdowns: status, client, date range
+ * - Sort options: date, amount, client
+ * - Multi-select checkboxes for bulk actions
+ * - Bulk action bar: mark paid, export, resend
+ * - Tap row opens invoice detail panel
+ */
+export default function ListView({ invoices, config, onInvoiceClick, onRefresh }) {
+  // Filter state
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [dateRangeFilter, setDateRangeFilter] = useState("all");
+
+  // Sort state
+  const [sortBy, setSortBy] = useState("date");
+  const [sortOrder, setSortOrder] = useState("desc");
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  // Bulk action progress state
+  const [bulkActionInProgress, setBulkActionInProgress] = useState(null); // 'markPaid' | 'export' | 'resend' | null
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, status: '' });
+
+  // Export format selector modal state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState('zip');
+
+  // Get unique clients for filter dropdown
+  const uniqueClients = useMemo(() => getUniqueClients(invoices), [invoices]);
+
+  /**
+   * Apply filters to invoice list
+   * Filters are applied client-side for simplicity (invoices already loaded)
+   * Memoized to avoid recalculating on every render
+   */
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter(invoice => {
+      const status = getInvoiceStatus(invoice);
+
+      // Status filter
+      if (statusFilter !== "all" && status !== statusFilter) {
+        return false;
+      }
+
+      // Client filter
+      if (clientFilter !== "all" && invoice.clientId !== clientFilter) {
+        return false;
+      }
+
+      // Date range filter - calculates time ranges relative to current date
+      if (dateRangeFilter !== "all" && invoice.weekStart) {
+        const invoiceDate = new Date(invoice.weekStart);
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+        if (dateRangeFilter === "30days" && invoiceDate < thirtyDaysAgo) {
+          return false;
+        }
+        if (dateRangeFilter === "90days" && invoiceDate < ninetyDaysAgo) {
+          return false;
+        }
+        if (dateRangeFilter === "year") {
+          const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          if (invoiceDate < oneYearAgo) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
+  }, [invoices, statusFilter, clientFilter, dateRangeFilter]);
+
+  /**
+   * Apply sorting to filtered invoices
+   * Sorts by date (weekStart), amount (totalPay), or client (clientId)
+   * Order can be ascending or descending
+   */
+  const sortedInvoices = useMemo(() => {
+    const sorted = [...filteredInvoices];
+
+    sorted.sort((a, b) => {
+      let compareValue = 0;
+
+      if (sortBy === "date") {
+        const dateA = new Date(a.weekStart || 0);
+        const dateB = new Date(b.weekStart || 0);
+        compareValue = dateA.getTime() - dateB.getTime();
+      } else if (sortBy === "amount") {
+        compareValue = (a.totalPay || 0) - (b.totalPay || 0);
+      } else if (sortBy === "client") {
+        compareValue = (a.clientId || "").localeCompare(b.clientId || "");
+      }
+
+      // Negate for descending order
+      return sortOrder === "asc" ? compareValue : -compareValue;
+    });
+
+    return sorted;
+  }, [filteredInvoices, sortBy, sortOrder]);
+
+  // Clear selections that are no longer in the filtered/sorted list
+  // This prevents bulk actions on filtered-out invoices
+  useEffect(() => {
+    setSelectedIds(prev => {
+      const visibleIds = new Set(sortedInvoices.map(inv => inv.invoiceId));
+      const filtered = new Set(Array.from(prev).filter(id => visibleIds.has(id)));
+      // Only update state if something changed to avoid unnecessary re-renders
+      if (filtered.size !== prev.size) {
+        return filtered;
+      }
+      return prev;
+    });
+  }, [sortedInvoices]);
+
+  // Toggle individual invoice selection
+  const handleToggleSelect = (invoiceId) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(invoiceId)) {
+        newSet.delete(invoiceId);
+      } else {
+        newSet.add(invoiceId);
+      }
+      return newSet;
+    });
+  };
+
+  // Toggle select all
+  const handleToggleSelectAll = () => {
+    if (selectedIds.size === sortedInvoices.length) {
+      // Deselect all
+      setSelectedIds(new Set());
+    } else {
+      // Select all filtered/sorted invoices
+      setSelectedIds(new Set(sortedInvoices.map(inv => inv.invoiceId)));
+    }
+  };
+
+  /**
+   * Bulk action: Mark selected invoices as paid
+   * Calls PATCH /api/invoices/{id}/status for each selected invoice in parallel
+   */
+  const handleBulkMarkPaid = async () => {
+    const invoiceIds = Array.from(selectedIds);
+    const total = invoiceIds.length;
+
+    try {
+      setBulkActionInProgress('markPaid');
+      setBulkProgress({ current: 0, total, status: 'Marking invoices as paid...' });
+
+      const token = await getAuthToken();
+      if (!token) {
+        alert('Authentication required. Please sign in.');
+        return;
+      }
+
+      // Use ref to track progress count to avoid race conditions
+      const progressCountRef = { current: 0 };
+
+      // Process all invoices in parallel for speed
+      const results = await Promise.allSettled(
+        invoiceIds.map(async (invoiceId) => {
+          const response = await fetch(`${API_BASE}/api/invoices/${invoiceId}/status`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: 'paid' })
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to mark ${invoiceId} as paid`);
+          }
+
+          // Update progress using ref to prevent race condition
+          progressCountRef.current += 1;
+          setBulkProgress(prev => ({ ...prev, current: progressCountRef.current }));
+          return invoiceId;
+        })
+      );
+
+      // Count successes and failures
+      const successful = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+
+      // Show feedback
+      if (failed === 0) {
+        alert(`✓ Successfully marked ${successful} invoice(s) as paid`);
+      } else {
+        alert(`Marked ${successful} invoice(s) as paid. ${failed} failed.`);
+      }
+
+      // Clear selections only if at least one operation succeeded
+      if (successful > 0) {
+        setSelectedIds(new Set());
+      }
+
+      // Refresh invoice data to show updated statuses
+      if (successful > 0 && onRefresh) {
+        await onRefresh();
+      }
+
+    } catch (error) {
+      console.error('Bulk mark paid error:', error);
+      alert(`Error marking invoices as paid: ${error.message}`);
+    } finally {
+      setBulkActionInProgress(null);
+      setBulkProgress({ current: 0, total: 0, status: '' });
+    }
+  };
+
+  /**
+   * Bulk action: Export selected invoices
+   * Shows format selector modal, then calls POST /api/export
+   */
+  const handleBulkExport = () => {
+    // Show format selector modal
+    setShowExportModal(true);
+  };
+
+  /**
+   * Execute export after format selection
+   */
+  const executeExport = async (format) => {
+    const invoiceIds = Array.from(selectedIds);
+
+    try {
+      setShowExportModal(false);
+      setBulkActionInProgress('export');
+      setBulkProgress({ current: 0, total: 1, status: `Generating ${format.toUpperCase()} export...` });
+
+      const token = await getAuthToken();
+      if (!token) {
+        alert('Authentication required. Please sign in.');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/api/export`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          invoiceIds,
+          format
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Export failed');
+      }
+
+      const data = await response.json();
+
+      // Trigger download from signed URL
+      if (data.downloadUrl) {
+        // Create temporary link and click it to trigger download
+        const link = document.createElement('a');
+        link.href = data.downloadUrl;
+        link.download = `invoices-export.${format}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        alert(`✓ Export ready! Download should start automatically. (${data.invoiceCount} invoices)`);
+
+        // Clear selections on successful export
+        setSelectedIds(new Set());
+      }
+
+    } catch (error) {
+      console.error('Export error:', error);
+      alert(`Export failed: ${error.message}`);
+    } finally {
+      setBulkActionInProgress(null);
+      setBulkProgress({ current: 0, total: 0, status: '' });
+    }
+  };
+
+  /**
+   * Bulk action: Resend selected invoices
+   * Calls POST /api/invoices/resend with selected invoice IDs
+   */
+  const handleBulkResend = async () => {
+    const invoiceIds = Array.from(selectedIds);
+    const total = invoiceIds.length;
+
+    if (!confirm(`Resend ${total} invoice(s) to their respective clients?`)) {
+      return;
+    }
+
+    try {
+      setBulkActionInProgress('resend');
+      setBulkProgress({ current: 0, total, status: 'Resending invoices...' });
+
+      const token = await getAuthToken();
+      if (!token) {
+        alert('Authentication required. Please sign in.');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/api/invoices/resend`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ invoiceIds })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Resend failed');
+      }
+
+      const data = await response.json();
+
+      // Show feedback with success/failure counts
+      const successful = data.successful || 0;
+      const failed = data.failed || 0;
+
+      if (failed === 0) {
+        alert(`✓ Successfully resent ${successful} invoice(s)`);
+      } else {
+        alert(`Resent ${successful} invoice(s). ${failed} failed.`);
+      }
+
+      // Clear selections only if at least one operation succeeded
+      if (successful > 0) {
+        setSelectedIds(new Set());
+      }
+
+      // Refresh invoice data to show updated statuses
+      if (successful > 0 && onRefresh) {
+        await onRefresh();
+      }
+
+    } catch (error) {
+      console.error('Resend error:', error);
+      alert(`Error resending invoices: ${error.message}`);
+    } finally {
+      setBulkActionInProgress(null);
+      setBulkProgress({ current: 0, total: 0, status: '' });
+    }
+  };
+
+  // Toggle sort order for a given field
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      // Toggle order
+      setSortOrder(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      // New field, default to descending
+      setSortBy(field);
+      setSortOrder("desc");
+    }
+  };
+
+  const acc = config.accent;
+  const allSelected = sortedInvoices.length > 0 && selectedIds.size === sortedInvoices.length;
+
+  return (
+    <div style={{
+      width: "100%",
+      maxWidth: 900,
+      margin: "0 auto",
+      paddingBottom: selectedIds.size > 0 ? 80 : 0
+    }}>
+      {/* Filter and Sort Controls */}
+      <div style={{
+        background: "white",
+        borderRadius: 12,
+        border: `1px solid ${chrome.border}`,
+        padding: "20px",
+        marginBottom: 16
+      }}>
+        {/* Filters Row */}
+        <div style={{
+          display: "flex",
+          gap: 12,
+          marginBottom: 16,
+          flexWrap: "wrap"
+        }}>
+          {/* Status Filter */}
+          <div style={{ flex: "1 1 200px", minWidth: 150 }}>
+            <label htmlFor="status-filter" style={{
+              display: "block",
+              fontSize: 11,
+              fontWeight: 600,
+              color: chrome.mutedText,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              marginBottom: 6
+            }}>
+              Status
+            </label>
+            <select
+              id="status-filter"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                fontSize: 13,
+                fontWeight: 600,
+                border: `1.5px solid ${chrome.border}`,
+                borderRadius: 6,
+                background: "white",
+                color: "#6a4a40",
+                cursor: "pointer"
+              }}
+            >
+              <option value="all">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="sent">Sent</option>
+              <option value="paid">Paid</option>
+              <option value="overdue">Overdue</option>
+            </select>
+          </div>
+
+          {/* Client Filter */}
+          <div style={{ flex: "1 1 200px", minWidth: 150 }}>
+            <label htmlFor="client-filter" style={{
+              display: "block",
+              fontSize: 11,
+              fontWeight: 600,
+              color: chrome.mutedText,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              marginBottom: 6
+            }}>
+              Client
+            </label>
+            <select
+              id="client-filter"
+              value={clientFilter}
+              onChange={(e) => setClientFilter(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                fontSize: 13,
+                fontWeight: 600,
+                border: `1.5px solid ${chrome.border}`,
+                borderRadius: 6,
+                background: "white",
+                color: "#6a4a40",
+                cursor: "pointer"
+              }}
+            >
+              <option value="all">All Clients</option>
+              {uniqueClients.map(client => (
+                <option key={client} value={client}>{client}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Range Filter */}
+          <div style={{ flex: "1 1 200px", minWidth: 150 }}>
+            <label htmlFor="date-range-filter" style={{
+              display: "block",
+              fontSize: 11,
+              fontWeight: 600,
+              color: chrome.mutedText,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              marginBottom: 6
+            }}>
+              Date Range
+            </label>
+            <select
+              id="date-range-filter"
+              value={dateRangeFilter}
+              onChange={(e) => setDateRangeFilter(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                fontSize: 13,
+                fontWeight: 600,
+                border: `1.5px solid ${chrome.border}`,
+                borderRadius: 6,
+                background: "white",
+                color: "#6a4a40",
+                cursor: "pointer"
+              }}
+            >
+              <option value="all">All Time</option>
+              <option value="30days">Last 30 Days</option>
+              <option value="90days">Last 90 Days</option>
+              <option value="year">Last Year</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Sort Controls */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap"
+        }}>
+          <span style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: chrome.mutedText,
+            textTransform: "uppercase",
+            letterSpacing: 0.5
+          }}>
+            Sort by:
+          </span>
+
+          {["date", "amount", "client"].map(field => {
+            const isActive = sortBy === field;
+            const label = field.charAt(0).toUpperCase() + field.slice(1);
+
+            return (
+              <button
+                key={field}
+                onClick={() => handleSort(field)}
+                style={{
+                  fontSize: 12,
+                  fontWeight: isActive ? 700 : 600,
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  border: isActive ? "none" : `1.5px solid ${chrome.border}`,
+                  background: isActive ? acc : "white",
+                  color: isActive ? "white" : chrome.mutedText,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4
+                }}
+              >
+                {label}
+                {isActive && (
+                  <span style={{ fontSize: 10 }}>
+                    {sortOrder === "asc" ? "↑" : "↓"}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Results Summary */}
+      <div style={{
+        fontSize: 12,
+        color: chrome.mutedText,
+        marginBottom: 12,
+        padding: "0 4px"
+      }}>
+        Showing {sortedInvoices.length} of {invoices.length} invoice{invoices.length !== 1 ? "s" : ""}
+        {selectedIds.size > 0 && (
+          <span style={{ fontWeight: 600, color: acc }}>
+            {" • "}{selectedIds.size} selected
+          </span>
+        )}
+      </div>
+
+      {/* Invoice List */}
+      {sortedInvoices.length === 0 ? (
+        <div style={{
+          background: "white",
+          borderRadius: 12,
+          border: `1px solid ${chrome.border}`,
+          padding: "40px 20px",
+          textAlign: "center"
+        }}>
+          <div style={{
+            fontSize: 32,
+            marginBottom: 12
+          }}>🔍</div>
+          <div style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: "#6a4a40",
+            marginBottom: 6
+          }}>
+            No invoices found
+          </div>
+          <div style={{
+            fontSize: 12,
+            color: "#9a8070",
+            lineHeight: 1.4
+          }}>
+            Try adjusting your filters to see more results
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Select All Header */}
+          <div style={{
+            background: "white",
+            borderRadius: "12px 12px 0 0",
+            border: `1px solid ${chrome.border}`,
+            borderBottom: "none",
+            padding: "12px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12
+          }}>
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={handleToggleSelectAll}
+              style={{
+                width: 16,
+                height: 16,
+                cursor: "pointer",
+                accentColor: acc
+              }}
+            />
+            <span style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: chrome.mutedText,
+              textTransform: "uppercase",
+              letterSpacing: 0.5
+            }}>
+              Select All
+            </span>
+          </div>
+
+          {/* Invoice Cards */}
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 1
+          }}>
+            {sortedInvoices.map((invoice, index) => {
+              const status = getInvoiceStatus(invoice);
+              const statusColor = STATUS_COLORS[status];
+              const isSelected = selectedIds.has(invoice.invoiceId);
+              const isLast = index === sortedInvoices.length - 1;
+
+              return (
+                <div
+                  key={invoice.invoiceId}
+                  style={{
+                    background: "white",
+                    border: `1px solid ${chrome.border}`,
+                    borderTop: "none",
+                    borderRadius: isLast ? "0 0 12px 12px" : 0,
+                    padding: "16px 20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 16,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    ...(isSelected && {
+                      background: "#fdf9f6",
+                      borderColor: acc
+                    })
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = "#f9f3ee";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = "white";
+                    }
+                  }}
+                >
+                  {/* Checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      handleToggleSelect(invoice.invoiceId);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      width: 16,
+                      height: 16,
+                      cursor: "pointer",
+                      accentColor: acc,
+                      flexShrink: 0
+                    }}
+                  />
+
+                  {/* Main Content - Clickable */}
+                  <div
+                    onClick={() => onInvoiceClick && onInvoiceClick(invoice)}
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 20,
+                      flexWrap: "wrap"
+                    }}
+                  >
+                    {/* Status Badge */}
+                    <div style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: "6px 10px",
+                      borderRadius: 6,
+                      background: statusColor,
+                      color: "white",
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5,
+                      flexShrink: 0,
+                      minWidth: 70,
+                      textAlign: "center"
+                    }}>
+                      {STATUS_LABELS[status]}
+                    </div>
+
+                    {/* Invoice Info */}
+                    <div style={{ flex: "1 1 200px", minWidth: 150 }}>
+                      <div style={{
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: "#6a4a40",
+                        marginBottom: 4
+                      }}>
+                        {invoice.invoiceNumber || invoice.invoiceId}
+                      </div>
+                      <div style={{
+                        fontSize: 12,
+                        color: chrome.mutedText
+                      }}>
+                        {invoice.weekStart} to {invoice.weekEnd}
+                      </div>
+                    </div>
+
+                    {/* Client */}
+                    <div style={{ flex: "1 1 150px", minWidth: 120 }}>
+                      <div style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: chrome.mutedText,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        marginBottom: 3
+                      }}>
+                        Client
+                      </div>
+                      <div style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "#6a4a40"
+                      }}>
+                        {invoice.clientId || "Unknown"}
+                      </div>
+                    </div>
+
+                    {/* Hours */}
+                    <div style={{ flex: "0 0 80px", textAlign: "right" }}>
+                      <div style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: chrome.mutedText,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        marginBottom: 3
+                      }}>
+                        Hours
+                      </div>
+                      <div style={{
+                        fontSize: 15,
+                        fontWeight: 700,
+                        color: "#6a4a40"
+                      }}>
+                        {invoice.totalHours || 0}
+                      </div>
+                    </div>
+
+                    {/* Amount */}
+                    <div style={{ flex: "0 0 100px", textAlign: "right" }}>
+                      <div style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: chrome.mutedText,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        marginBottom: 3
+                      }}>
+                        Amount
+                      </div>
+                      <div style={{
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: acc
+                      }}>
+                        ${(invoice.totalPay || 0).toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Bulk Action Bar (Fixed at Bottom) */}
+      {selectedIds.size > 0 && (
+        <div
+          role="toolbar"
+          aria-label="Bulk actions"
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: "#2e2218",
+            borderTop: `2px solid ${acc}`,
+            padding: "16px 20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+            zIndex: 100,
+            boxShadow: "0 -4px 16px rgba(0,0,0,0.1)"
+          }}>
+          {/* Selection Count */}
+          <div style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: chrome.brightText
+          }}>
+            {selectedIds.size} invoice{selectedIds.size !== 1 ? "s" : ""} selected
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap"
+          }}>
+            <button
+              onClick={handleBulkMarkPaid}
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                padding: "10px 18px",
+                borderRadius: 6,
+                border: "none",
+                background: "#5a8a5a",
+                color: "white",
+                cursor: "pointer",
+                transition: "all 0.15s"
+              }}
+              onMouseEnter={(e) => e.target.style.opacity = "0.85"}
+              onMouseLeave={(e) => e.target.style.opacity = "1"}
+            >
+              ✓ Mark Paid
+            </button>
+
+            <button
+              onClick={handleBulkExport}
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                padding: "10px 18px",
+                borderRadius: 6,
+                border: "none",
+                background: "#4a94b4",
+                color: "white",
+                cursor: "pointer",
+                transition: "all 0.15s"
+              }}
+              onMouseEnter={(e) => e.target.style.opacity = "0.85"}
+              onMouseLeave={(e) => e.target.style.opacity = "1"}
+            >
+              📦 Export
+            </button>
+
+            <button
+              onClick={handleBulkResend}
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                padding: "10px 18px",
+                borderRadius: 6,
+                border: "none",
+                background: acc,
+                color: "white",
+                cursor: "pointer",
+                transition: "all 0.15s"
+              }}
+              onMouseEnter={(e) => e.target.style.opacity = "0.85"}
+              onMouseLeave={(e) => e.target.style.opacity = "1"}
+            >
+              ✉ Resend
+            </button>
+
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                padding: "10px 18px",
+                borderRadius: 6,
+                border: `1.5px solid ${chrome.mutedText}`,
+                background: "transparent",
+                color: chrome.brightText,
+                cursor: "pointer",
+                transition: "all 0.15s"
+              }}
+              onMouseEnter={(e) => e.target.style.background = "rgba(255,255,255,0.1)"}
+              onMouseLeave={(e) => e.target.style.background = "transparent"}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Export Format Selector Modal */}
+      {showExportModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 200
+          }}
+          onClick={() => setShowExportModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 12,
+              padding: "24px",
+              maxWidth: 400,
+              width: "90%",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.2)"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: "#6a4a40",
+              marginBottom: 16
+            }}>
+              Select Export Format
+            </h3>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "12px",
+                border: `2px solid ${exportFormat === 'zip' ? acc : chrome.border}`,
+                borderRadius: 8,
+                marginBottom: 12,
+                cursor: "pointer",
+                background: exportFormat === 'zip' ? tint(acc, 0.05) : 'white'
+              }}>
+                <input
+                  type="radio"
+                  name="exportFormat"
+                  value="zip"
+                  checked={exportFormat === 'zip'}
+                  onChange={(e) => setExportFormat(e.target.value)}
+                  style={{
+                    marginRight: 12,
+                    accentColor: acc,
+                    width: 18,
+                    height: 18,
+                    cursor: "pointer"
+                  }}
+                />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#6a4a40" }}>
+                    ZIP Archive
+                  </div>
+                  <div style={{ fontSize: 12, color: chrome.mutedText }}>
+                    Download all invoice PDFs in a compressed file
+                  </div>
+                </div>
+              </label>
+
+              <label style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "12px",
+                border: `2px solid ${exportFormat === 'csv' ? acc : chrome.border}`,
+                borderRadius: 8,
+                cursor: "pointer",
+                background: exportFormat === 'csv' ? tint(acc, 0.05) : 'white'
+              }}>
+                <input
+                  type="radio"
+                  name="exportFormat"
+                  value="csv"
+                  checked={exportFormat === 'csv'}
+                  onChange={(e) => setExportFormat(e.target.value)}
+                  style={{
+                    marginRight: 12,
+                    accentColor: acc,
+                    width: 18,
+                    height: 18,
+                    cursor: "pointer"
+                  }}
+                />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#6a4a40" }}>
+                    CSV Spreadsheet
+                  </div>
+                  <div style={{ fontSize: 12, color: chrome.mutedText }}>
+                    Export invoice data as a table for accounting software
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div style={{
+              display: "flex",
+              gap: 12,
+              justifyContent: "flex-end"
+            }}>
+              <button
+                onClick={() => setShowExportModal(false)}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  padding: "10px 18px",
+                  borderRadius: 6,
+                  border: `1.5px solid ${chrome.border}`,
+                  background: "white",
+                  color: "#6a4a40",
+                  cursor: "pointer"
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => executeExport(exportFormat)}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  padding: "10px 18px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: acc,
+                  color: "white",
+                  cursor: "pointer"
+                }}
+              >
+                Export {selectedIds.size} Invoice{selectedIds.size !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Action Progress Overlay */}
+      {bulkActionInProgress && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 300
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 12,
+              padding: "32px",
+              maxWidth: 400,
+              width: "90%",
+              textAlign: "center",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+            }}
+          >
+            <div style={{
+              fontSize: 24,
+              marginBottom: 16
+            }}>
+              ⏳
+            </div>
+
+            <div style={{
+              fontSize: 16,
+              fontWeight: 700,
+              color: "#6a4a40",
+              marginBottom: 8
+            }}>
+              {bulkProgress.status}
+            </div>
+
+            {bulkProgress.total > 1 && (
+              <div style={{
+                fontSize: 14,
+                color: chrome.mutedText,
+                marginBottom: 16
+              }}>
+                {bulkProgress.current} of {bulkProgress.total}
+              </div>
+            )}
+
+            {/* Simple progress bar */}
+            {bulkProgress.total > 0 && (
+              <div style={{
+                width: "100%",
+                height: 6,
+                background: "#e8d8cc",
+                borderRadius: 3,
+                overflow: "hidden"
+              }}>
+                <div style={{
+                  width: `${(bulkProgress.current / bulkProgress.total) * 100}%`,
+                  height: "100%",
+                  background: acc,
+                  transition: "width 0.3s ease"
+                }} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Helper function to create tinted colors with alpha
+ */
+function tint(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}

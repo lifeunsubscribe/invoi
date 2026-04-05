@@ -1,15 +1,16 @@
 # ADR: Invoi — Web App Migration
 
-**Status:** Draft
+**Status:** Active
 **Date:** 2026-04-02
+**Last Updated:** 2026-04-04 (desktop app archived)
 **Author:** Sarah (developer)
-**Supersedes:** `docs/Invoice-Builder-ADR.md` (desktop-only app for Lisa)
+**Supersedes:** Desktop-only invoice app (`invoice-builder` repo, now in maintenance mode)
 
 ---
 
 ## Context
 
-Lisa's invoice app (`lisa-invoice-app`) is a working local desktop tool: Flask backend, React (Vite) frontend, PyInstaller `.exe`, Gmail app-password email. It generates weekly invoices and monthly reports for a single 1099 home health aide contractor.
+**Historical note:** Lisa's original invoice app (`lisa-invoice-app`, now archived in the `invoice-builder` repo) was a local desktop tool: Flask backend, React (Vite) frontend, PyInstaller `.exe`, Gmail app-password email. It generated weekly invoices and monthly reports for a single 1099 home health aide contractor.
 
 The app works but has inherent limitations:
 
@@ -134,12 +135,14 @@ Build a serverless web application on AWS that:
 
 ### What Gets Sunset
 
-- **PyInstaller build pipeline** and `build.bat`
-- **GitHub Actions `.exe` workflow**
-- **`.env` with Gmail app passwords**
-- **`config.json` flat file**
-- **Heartbeat watchdog** (desktop-only browser lifecycle management)
-- **localhost:5000 serving pattern**
+**ARCHIVED (2026-04-04):** The desktop app has been officially sunset. All items below are historical references to the deprecated desktop architecture.
+
+- **PyInstaller build pipeline** and `build.bat` *(removed from codebase)*
+- **GitHub Actions `.exe` workflow** *(removed from codebase)*
+- **`.env` with Gmail app passwords** *(superseded by AWS SES + Cognito)*
+- **`config.json` flat file** *(superseded by DynamoDB)*
+- **Heartbeat watchdog** *(desktop-only browser lifecycle management - no longer needed)*
+- **localhost:5000 serving pattern** *(superseded by CloudFront + API Gateway)*
 
 ---
 
@@ -625,7 +628,7 @@ invoi/
 - [ ] Landing page / marketing page at `goinvoi.com`
 - [ ] Migrate Lisa's existing data (config + saved invoices) to her new Invoi account
 - [ ] Walk Lisa through the new sign-in flow
-- [ ] Sunset the `.exe` — archive the desktop ADR, remove PyInstaller pipeline
+- [x] Sunset the `.exe` — archive the desktop ADR, remove PyInstaller pipeline *(completed 2026-04-04 - see "What Gets Sunset" section)*
 
 ### Phase 6: Launch Prep
 

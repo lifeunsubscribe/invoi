@@ -27,9 +27,11 @@ backend/.venv/
 .DS_Store
 Thumbs.db
 .rite
+.rite-*.md
 .claude
 backend/node_modules
 
 # Development
 SCRATCHPAD.md
+.scratchpad.md
 .claude_todo.md
