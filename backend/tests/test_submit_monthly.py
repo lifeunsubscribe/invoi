@@ -274,3 +274,71 @@ class TestSubmitMonthly:
         assert 'SES error' in body['emailWarning']
         assert body['sent'] == []
         assert body['status'] == 'draft'  # Status should remain draft since email failed
+
+    def test_submit_monthly_idempotency_returns_existing_report(self):
+        """POST for already-generated report should return existing report without regeneration"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'year': 2026,
+                'month': 3,
+                'send': False
+            })
+        }
+
+        # Mock user config
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'rate': 28.00,
+            'template': 'morning-light'
+        }
+
+        # Mock existing report
+        existing_report = {
+            'userId': 'user-123',
+            'invoiceId': 'RPT-2026-03',
+            'type': 'monthly',
+            'status': 'sent',
+            'year': 2026,
+            'month': 3,
+            'monthLabel': 'March 2026',
+            'weekCount': 4,
+            'totalHours': 160,
+            'rate': 28.00,
+            'totalPay': 4480.00,
+            'pdfKey': 'users/user-123/reports/RPT-2026-03.pdf',
+            'createdAt': '2026-03-31T10:00:00Z'
+        }
+
+        with patch('functions.submit_monthly.get_user', return_value=mock_user):
+            with patch('functions.submit_monthly.get_invoice', return_value=existing_report):
+                with patch('functions.submit_monthly.query_invoices') as mock_query:
+                    with patch('functions.submit_monthly.generate_monthly_report') as mock_generate:
+                        response = handler(event, {})
+
+        # Should return 200 with existing report data
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+
+        # Verify existing report data is returned
+        assert body['reportId'] == 'RPT-2026-03'
+        assert body['s3Key'] == 'users/user-123/reports/RPT-2026-03.pdf'
+        assert body['monthLabel'] == 'March 2026'
+        assert body['totalHours'] == 160
+        assert body['totalPay'] == 4480.00
+        assert body['weekCount'] == 4
+        assert body['status'] == 'sent'
+        assert body['alreadyExists'] is True
+
+        # Verify PDF was NOT regenerated (functions not called)
+        mock_query.assert_not_called()
+        mock_generate.assert_not_called()

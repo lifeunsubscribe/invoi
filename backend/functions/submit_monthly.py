@@ -10,7 +10,7 @@ import boto3
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from services.db_service import query_invoices, get_user, put_invoice
+from services.db_service import query_invoices, get_user, put_invoice, get_invoice
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from botocore.exceptions import ClientError
@@ -143,6 +143,30 @@ def handler(event, context):
                 'body': json.dumps({'error': 'User configuration not found'})
             }
 
+        # Idempotency check: Check if report already exists for this month
+        # Report ID format: RPT-{year}-{month}
+        report_id = f"RPT-{year_int:04d}-{month_int:02d}"
+        existing_report = get_invoice(user_id, report_id)
+
+        if existing_report:
+            # Report already exists - return existing data (idempotent behavior)
+            logger.info(f"Report {report_id} already exists for user {user_id}. Returning existing report.")
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'reportId': existing_report.get('invoiceId'),
+                    's3Key': existing_report.get('pdfKey'),
+                    'monthLabel': existing_report.get('monthLabel'),
+                    'totalHours': existing_report.get('totalHours'),
+                    'totalPay': existing_report.get('totalPay'),
+                    'weekCount': existing_report.get('weekCount'),
+                    'status': existing_report.get('status'),
+                    'createdAt': existing_report.get('createdAt'),
+                    'alreadyExists': True  # Flag to indicate this was an idempotent response
+                })
+            }
+
         # Query weekly invoices for this month using scan-month logic
         # Format: INV-YYYYMMDD (e.g., INV-20260301 to INV-20260331)
         # Using day 01-31 covers all possible dates in any month
@@ -218,7 +242,7 @@ def handler(event, context):
         # Upload PDF to S3 at users/{userId}/reports/RPT-{year}-{month}.pdf
         # SST Ion provides bucket name via SST_Resource_<name>_name when linked
         bucket_name = os.environ['SST_Resource_InvoiStorage_name']
-        report_id = f"RPT-{year_int:04d}-{month_int:02d}"
+        # Note: report_id already defined above during idempotency check
         s3_key = f"users/{user_id}/reports/{report_id}.pdf"
 
         save_pdf_to_s3(pdf_bytes, bucket_name, s3_key)
