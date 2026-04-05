@@ -3762,18 +3762,18 @@ export default function App() {
     if (loading || !authChecked || !isAuthenticated()) return;
     if (firstRunChecked) return;
 
-    // Check if this is a first-time user (has default/incomplete profile data)
-    const isNewUser = !config.name ||
-                      config.name === "Jane Doe" ||
-                      !config.clientName ||
-                      config.clientName === "Client Agency";
+    // Check if this is a first-time user (has empty/incomplete profile data)
+    // Backend returns empty strings for new users who haven't saved their profile yet
+    const isNewUser = !config.name || config.name.trim() === '' ||
+                      !config.email || config.email.trim() === '' ||
+                      config.rate === 0;
 
     if (isNewUser && page === "menu") {
       setPage("welcome");
     }
 
     setFirstRunChecked(true);
-  }, [loading, authChecked, config, page, firstRunChecked]);
+  }, [loading, authChecked, config, page, firstRunChecked, setPage]);
 
   const handleNav = (dest) => {
     if (dest==="profile-folder") { setScrollToFolder(true); setPage("profile"); }
