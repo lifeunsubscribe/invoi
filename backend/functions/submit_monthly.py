@@ -149,23 +149,37 @@ def handler(event, context):
         existing_report = get_invoice(user_id, report_id)
 
         if existing_report:
-            # Report already exists - return existing data (idempotent behavior)
-            logger.info(f"Report {report_id} already exists for user {user_id}. Returning existing report.")
-            return {
-                'statusCode': 200,
-                'headers': headers,
-                'body': json.dumps({
-                    'reportId': existing_report.get('invoiceId'),
-                    's3Key': existing_report.get('pdfKey'),
-                    'monthLabel': existing_report.get('monthLabel'),
-                    'totalHours': existing_report.get('totalHours'),
-                    'totalPay': existing_report.get('totalPay'),
-                    'weekCount': existing_report.get('weekCount'),
-                    'status': existing_report.get('status'),
-                    'createdAt': existing_report.get('createdAt'),
-                    'alreadyExists': True  # Flag to indicate this was an idempotent response
-                })
-            }
+            # Validate that existing report has complete critical data
+            # If report is corrupted or incomplete, regenerate it instead of returning partial data
+            has_complete_data = all([
+                existing_report.get('pdfKey'),
+                existing_report.get('monthLabel'),
+                existing_report.get('totalHours') is not None,
+                existing_report.get('totalPay') is not None
+            ])
+
+            if has_complete_data:
+                # Report already exists with complete data - return existing data (idempotent behavior)
+                logger.info(f"Report {report_id} already exists for user {user_id}. Returning existing report.")
+                return {
+                    'statusCode': 200,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'reportId': existing_report.get('invoiceId'),
+                        's3Key': existing_report.get('pdfKey'),
+                        'monthLabel': existing_report.get('monthLabel'),
+                        'totalHours': existing_report.get('totalHours'),
+                        'totalPay': existing_report.get('totalPay'),
+                        'weekCount': existing_report.get('weekCount'),
+                        'status': existing_report.get('status'),
+                        'createdAt': existing_report.get('createdAt'),
+                        'alreadyExists': True  # Flag to indicate this was an idempotent response
+                    })
+                }
+            else:
+                # Existing report is incomplete or corrupted - regenerate it
+                logger.warning(f"Report {report_id} exists but is incomplete. Regenerating report.")
+                # Continue to regeneration logic below
 
         # Query weekly invoices for this month using scan-month logic
         # Format: INV-YYYYMMDD (e.g., INV-20260301 to INV-20260331)
