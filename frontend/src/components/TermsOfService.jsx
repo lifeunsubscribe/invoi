@@ -7,16 +7,18 @@
  * Last Updated: 2026-04-04
  */
 
+import theme from "../theme.js";
+
 export default function TermsOfService({ onBack }) {
-  const primaryColor = "#b76e79";
-  const darkText = "#2c1810";
-  const lightText = "#9a8070";
-  const lightBg = "#fdf8f4";
+  const primaryColor = theme.colors.primary;
+  const darkText = theme.colors.text.dark;
+  const lightText = theme.colors.text.light;
+  const lightBg = theme.colors.background.light;
 
   return (
     <div style={{
       minHeight: "100vh",
-      background: "linear-gradient(160deg, #f9f3ee, #f2ebe4)",
+      background: theme.colors.background.gradient,
       fontFamily: "sans-serif"
     }}>
       {/* Header */}
