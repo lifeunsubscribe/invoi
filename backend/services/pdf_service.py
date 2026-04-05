@@ -38,7 +38,6 @@ from backend.themes import (
 )
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # S3 client for PDF storage (initialized on first use)
 _s3_client = None

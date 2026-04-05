@@ -5,7 +5,6 @@ from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 dynamodb = boto3.resource('dynamodb')
 
