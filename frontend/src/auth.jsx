@@ -9,6 +9,31 @@
  * - Handle OAuth flow with Google
  * - Store/refresh JWT tokens
  * - Provide sign-in/sign-out functions
+ *
+ * SECURITY: PKCE Implementation Required
+ * PKCE (Proof Key for Code Exchange) utilities are available in utils/pkce.js
+ * and MUST be used when implementing the real OAuth authorization code flow.
+ *
+ * Integration steps:
+ * 1. Import { setupPKCE, retrievePKCEVerifier, clearPKCEVerifier } from './utils/pkce'
+ * 2. Before redirecting to Cognito OAuth:
+ *    const { challenge } = await setupPKCE();
+ *    const authUrl = `${cognitoUrl}/oauth2/authorize?
+ *      response_type=code&
+ *      client_id=${clientId}&
+ *      redirect_uri=${redirectUri}&
+ *      code_challenge=${challenge}&
+ *      code_challenge_method=S256&
+ *      scope=email+openid+profile`;
+ *    window.location.href = authUrl;
+ *
+ * 3. In OAuth callback handler (when receiving authorization code):
+ *    const code_verifier = retrievePKCEVerifier();
+ *    // Exchange code + verifier for tokens at /oauth2/token endpoint
+ *    // Include code_verifier in POST body
+ *    clearPKCEVerifier(); // After successful token exchange
+ *
+ * See docs/security/PKCE-IMPLEMENTATION.md for detailed implementation guide.
  */
 
 /**
