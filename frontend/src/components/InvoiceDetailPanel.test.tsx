@@ -161,33 +161,34 @@ describe('InvoiceDetailPanel - Focus Trapping', () => {
   });
 
   it('should restore focus to previously focused element when closed', async () => {
-    // Create a trigger button outside the modal
-    const { container } = render(
-      <div>
-        <button data-testid="trigger-button">Open Invoice</button>
-        <InvoiceDetailPanel
-          invoice={mockInvoice}
-          invoices={[mockInvoice]}
-          config={mockConfig}
-          onClose={mockOnClose}
-        />
-      </div>
-    );
+    // Create a trigger button and focus it BEFORE rendering the modal
+    const triggerButton = document.createElement('button');
+    triggerButton.setAttribute('data-testid', 'trigger-button');
+    triggerButton.textContent = 'Open Invoice';
+    document.body.appendChild(triggerButton);
 
-    const triggerButton = screen.getByTestId('trigger-button');
-
-    // Focus the trigger button first
+    // Focus the trigger button BEFORE the modal renders
     triggerButton.focus();
     expect(triggerButton).toHaveFocus();
 
-    // Now the modal component stores the previously focused element
-    // We need to re-render to simulate the focus restoration
+    // Now render the modal - it will capture the trigger button as previouslyFocusedElement
+    const { unmount } = render(
+      <InvoiceDetailPanel
+        invoice={mockInvoice}
+        invoices={[mockInvoice]}
+        config={mockConfig}
+        onClose={mockOnClose}
+      />
+    );
 
     // Wait for modal to open and focus its close button
     await waitFor(() => {
       const closeButton = screen.getByRole('button', { name: /close invoice details/i });
       expect(closeButton).toHaveFocus();
     }, { timeout: 500 });
+
+    // Verify trigger button lost focus
+    expect(triggerButton).not.toHaveFocus();
 
     // Click close button
     const closeButton = screen.getByRole('button', { name: /close invoice details/i });
@@ -196,11 +197,12 @@ describe('InvoiceDetailPanel - Focus Trapping', () => {
     // Wait for the close animation and focus restoration (300ms)
     await waitFor(() => {
       expect(mockOnClose).toHaveBeenCalled();
-    }, { timeout: 400 });
+      // Verify focus was actually restored to the trigger button
+      expect(triggerButton).toHaveFocus();
+    }, { timeout: 500 });
 
-    // Note: In a real scenario, after onClose is called and the component unmounts,
-    // focus would be restored. In this test, we verify that onClose was called,
-    // which triggers the focus restoration logic in the setTimeout callback.
+    // Cleanup
+    document.body.removeChild(triggerButton);
   });
 
   it('should have aria-hidden on backdrop', () => {
