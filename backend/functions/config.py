@@ -34,6 +34,7 @@ def handler(event, context):
     try:
         # Extract HTTP method (supports both API Gateway v1 and v2 formats)
         http_method = event.get('requestContext', {}).get('http', {}).get('method') or event.get('httpMethod', 'GET')
+        logger.info(f"Received request: method={http_method} path=/api/config")
 
         # Handle CORS preflight requests before auth check
         if http_method == 'OPTIONS':
@@ -101,7 +102,10 @@ def handle_get(user_id, headers):
 
         if not user:
             # Return default profile for new users (not yet saved to DB)
+            logger.info(f"No existing profile found for user_id={user_id}, returning defaults")
             user = get_default_profile(user_id)
+        else:
+            logger.info(f"Successfully retrieved profile for user_id={user_id}")
 
         return {
             'statusCode': 200,
@@ -161,6 +165,7 @@ def handle_post(user_id, event, headers):
         # Update user profile in DynamoDB (put_user handles create or update)
         updated_user = put_user(user_data)
 
+        logger.info(f"Successfully updated profile for user_id={user_id}")
         return {
             'statusCode': 200,
             'headers': headers,
