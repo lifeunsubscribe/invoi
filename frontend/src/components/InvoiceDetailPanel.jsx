@@ -189,7 +189,12 @@ export default function InvoiceDetailPanel({
     setTimeout(() => {
       onClose && onClose();
       // Restore focus to the element that was focused before the modal opened
-      if (previouslyFocusedElement.current && typeof previouslyFocusedElement.current.focus === 'function') {
+      // Check that the element still exists in the DOM before focusing
+      if (
+        previouslyFocusedElement.current &&
+        typeof previouslyFocusedElement.current.focus === 'function' &&
+        document.contains(previouslyFocusedElement.current)
+      ) {
         previouslyFocusedElement.current.focus();
       }
     }, 300);
