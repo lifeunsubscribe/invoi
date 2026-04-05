@@ -7,6 +7,7 @@ import PrivacyPolicy from "./components/PrivacyPolicy.jsx";
 import TermsOfService from "./components/TermsOfService.jsx";
 import WelcomePage from "./components/WelcomePage.jsx";
 import Tooltip from "./components/Tooltip.jsx";
+import theme from "./theme.js";
 
 // API configuration - VITE_API_URL is injected by SST during deployment
 // For local development with `npx sst dev`, the URL is automatically provided
@@ -24,10 +25,10 @@ if (!API_BASE && import.meta.env.DEV) {
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 const TEMPLATES = [
   { id:"morning-light", label:"Morning Light", emoji:"🌸", structure:"light-header", fontStyle:"serif",
-    accent:"#b76e79", headerBg:"linear-gradient(135deg,rgba(183,110,121,0.16),rgba(183,110,121,0.28))", headerBorder:"4px solid #b76e79",
-    headerAccent:"#b76e79", headerName:"#2c1810", headerMeta:"#6a4a40", textDark:"#2c1810", textMedium:"#6a4a40", textLight:"#9a8070",
-    rowEven:"white", rowOdd:"#fdf8f4", infoBg:"#fdf2f4", infoBorder:"#f0dce0", footerBg:"#fdf2f4", footerText:"#9a8070",
-    chromeBg:"#fdf8f4", chromeBorder:"#f0dce0", chromeMuted:"#9a8070" },
+    accent:theme.colors.primary, headerBg:"linear-gradient(135deg,rgba(183,110,121,0.16),rgba(183,110,121,0.28))", headerBorder:`4px solid ${theme.colors.primary}`,
+    headerAccent:theme.colors.primary, headerName:theme.colors.text.dark, headerMeta:theme.colors.text.medium, textDark:theme.colors.text.dark, textMedium:theme.colors.text.medium, textLight:theme.colors.text.light,
+    rowEven:"white", rowOdd:theme.colors.background.light, infoBg:theme.colors.info.background, infoBorder:theme.colors.info.border, footerBg:theme.colors.info.background, footerText:theme.colors.text.light,
+    chromeBg:theme.colors.background.light, chromeBorder:theme.colors.border.pink, chromeMuted:theme.colors.text.light },
   { id:"caring-hands", label:"Caring Hands", emoji:"🤍", structure:"dark-header", fontStyle:"sans",
     accent:"#7ab5a8", headerBg:"#1a2a3a", headerBorder:"3px solid #7ab5a8",
     headerAccent:"#7ab5a8", headerName:"white", headerMeta:"#8aacaa", textDark:"#1a2a3a", textMedium:"#4a6a60", textLight:"#7a9a90",
@@ -287,7 +288,7 @@ const defaultConfig = {
   clientEmail:    "billing@clientagency.com",
   accountantEmail:"accountant@cpa.com",
   template:       "morning-light",
-  accent:         "#b76e79",
+  accent:         theme.colors.primary,
   invoiceNote:    "Thank you for your business.",
   saveFolder:     deriveSaveFolder("Jane Doe"),
   clients:        [],

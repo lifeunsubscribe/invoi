@@ -5,12 +5,14 @@
  * Provides quick-start guide and feedback collection mechanism.
  */
 
+import theme from "../theme.js";
+
 export default function WelcomePage({ onGetStarted, onNavigate }) {
-  const primaryColor = "#b76e79";
-  const lightBg = "#fdf8f4";
-  const darkText = "#2c1810";
-  const mediumText = "#6a4a40";
-  const lightText = "#9a8070";
+  const primaryColor = theme.colors.primary;
+  const lightBg = theme.colors.background.light;
+  const darkText = theme.colors.text.dark;
+  const mediumText = theme.colors.text.medium;
+  const lightText = theme.colors.text.light;
 
   const steps = [
     {
@@ -45,7 +47,7 @@ export default function WelcomePage({ onGetStarted, onNavigate }) {
   return (
     <div style={{
       minHeight: "100vh",
-      background: "linear-gradient(160deg, #f9f3ee, #f2ebe4)",
+      background: theme.colors.background.gradient,
       fontFamily: "sans-serif",
       padding: "40px 24px"
     }}>
@@ -230,23 +232,23 @@ export default function WelcomePage({ onGetStarted, onNavigate }) {
             onClick={onGetStarted}
             style={{
               padding: "16px 48px",
-              background: `linear-gradient(135deg, ${primaryColor}, rgba(183, 110, 121, 0.85))`,
+              background: theme.gradients.primaryButton(primaryColor),
               border: "none",
               borderRadius: 12,
               color: "white",
               fontWeight: 700,
               fontSize: 18,
               cursor: "pointer",
-              boxShadow: `0 6px 24px rgba(183, 110, 121, 0.3)`,
+              boxShadow: theme.shadows.primary,
               transition: "all 0.2s"
             }}
             onMouseEnter={e => {
               e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.boxShadow = `0 10px 32px rgba(183, 110, 121, 0.4)`;
+              e.currentTarget.style.boxShadow = theme.shadows.primaryHover;
             }}
             onMouseLeave={e => {
               e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow = `0 6px 24px rgba(183, 110, 121, 0.3)`;
+              e.currentTarget.style.boxShadow = theme.shadows.primary;
             }}
           >
             Complete Your Profile

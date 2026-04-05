@@ -5,12 +5,14 @@
  * Explains value proposition for hourly 1099 contractors.
  */
 
+import theme from "../theme.js";
+
 export default function LandingPage({ onSignIn, onNavigate }) {
-  const primaryColor = "#b76e79";
-  const lightBg = "#fdf8f4";
-  const darkText = "#2c1810";
-  const mediumText = "#6a4a40";
-  const lightText = "#9a8070";
+  const primaryColor = theme.colors.primary;
+  const lightBg = theme.colors.background.light;
+  const darkText = theme.colors.text.dark;
+  const mediumText = theme.colors.text.medium;
+  const lightText = theme.colors.text.light;
 
   const occupations = [
     { icon: "🏥", name: "Home Health Aides" },
@@ -47,7 +49,7 @@ export default function LandingPage({ onSignIn, onNavigate }) {
   return (
     <div style={{
       minHeight: "100vh",
-      background: "linear-gradient(160deg, #f9f3ee, #f2ebe4)",
+      background: theme.colors.background.gradient,
       fontFamily: "sans-serif"
     }}>
       {/* Header */}
@@ -128,23 +130,23 @@ export default function LandingPage({ onSignIn, onNavigate }) {
           onClick={onSignIn}
           style={{
             padding: "16px 48px",
-            background: `linear-gradient(135deg, ${primaryColor}, rgba(183, 110, 121, 0.85))`,
+            background: theme.gradients.primaryButton(primaryColor),
             border: "none",
             borderRadius: 12,
             color: "white",
             fontWeight: 700,
             fontSize: 18,
             cursor: "pointer",
-            boxShadow: `0 6px 24px rgba(183, 110, 121, 0.3)`,
+            boxShadow: theme.shadows.primary,
             transition: "all 0.2s"
           }}
           onMouseEnter={e => {
             e.currentTarget.style.transform = "translateY(-2px)";
-            e.currentTarget.style.boxShadow = `0 10px 32px rgba(183, 110, 121, 0.4)`;
+            e.currentTarget.style.boxShadow = theme.shadows.primaryHover;
           }}
           onMouseLeave={e => {
             e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = `0 6px 24px rgba(183, 110, 121, 0.3)`;
+            e.currentTarget.style.boxShadow = theme.shadows.primary;
           }}
         >
           Get Started Free
@@ -155,8 +157,8 @@ export default function LandingPage({ onSignIn, onNavigate }) {
       <section style={{
         background: "white",
         padding: "60px 24px",
-        borderTop: `1px solid #e8ddd4`,
-        borderBottom: `1px solid #e8ddd4`
+        borderTop: `1px solid ${theme.colors.border.light}`,
+        borderBottom: `1px solid ${theme.colors.border.light}`
       }}>
         <div style={{
           maxWidth: "1200px",
@@ -196,7 +198,7 @@ export default function LandingPage({ onSignIn, onNavigate }) {
                 background: lightBg,
                 borderRadius: 12,
                 textAlign: "center",
-                border: "2px solid #f0dce0"
+                border: `2px solid ${theme.colors.border.pink}`
               }}>
                 <div style={{ fontSize: 48, marginBottom: 12 }}>{occ.icon}</div>
                 <div style={{
@@ -236,7 +238,7 @@ export default function LandingPage({ onSignIn, onNavigate }) {
               padding: "32px",
               background: "white",
               borderRadius: 16,
-              border: "2px solid #e8ddd4",
+              border: `2px solid ${theme.colors.border.light}`,
               boxShadow: "0 2px 12px rgba(0, 0, 0, 0.04)"
             }}>
               <div style={{
@@ -263,7 +265,7 @@ export default function LandingPage({ onSignIn, onNavigate }) {
       {/* CTA Section */}
       <section style={{
         padding: "60px 24px",
-        background: `linear-gradient(135deg, rgba(183, 110, 121, 0.12), rgba(183, 110, 121, 0.24))`,
+        background: theme.gradients.ctaBackground,
         borderTop: `4px solid ${primaryColor}`,
         textAlign: "center"
       }}>
@@ -292,23 +294,23 @@ export default function LandingPage({ onSignIn, onNavigate }) {
             onClick={onSignIn}
             style={{
               padding: "16px 48px",
-              background: `linear-gradient(135deg, ${primaryColor}, rgba(183, 110, 121, 0.85))`,
+              background: theme.gradients.primaryButton(primaryColor),
               border: "none",
               borderRadius: 12,
               color: "white",
               fontWeight: 700,
               fontSize: 18,
               cursor: "pointer",
-              boxShadow: `0 6px 24px rgba(183, 110, 121, 0.3)`,
+              boxShadow: theme.shadows.primary,
               transition: "all 0.2s"
             }}
             onMouseEnter={e => {
               e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.boxShadow = `0 10px 32px rgba(183, 110, 121, 0.4)`;
+              e.currentTarget.style.boxShadow = theme.shadows.primaryHover;
             }}
             onMouseLeave={e => {
               e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow = `0 6px 24px rgba(183, 110, 121, 0.3)`;
+              e.currentTarget.style.boxShadow = theme.shadows.primary;
             }}
           >
             Sign in with Google
@@ -360,7 +362,7 @@ export default function LandingPage({ onSignIn, onNavigate }) {
             >
               Privacy Policy
             </button>
-            <span style={{ color: "#d0c0b0" }}>•</span>
+            <span style={{ color: theme.colors.border.muted }}>•</span>
             <button
               onClick={() => onNavigate && onNavigate("terms")}
               style={{
