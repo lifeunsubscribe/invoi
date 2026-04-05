@@ -5,6 +5,8 @@ import LandingPage from "./components/LandingPage.jsx";
 import ImportPage from "./components/ImportPage.jsx";
 import PrivacyPolicy from "./components/PrivacyPolicy.jsx";
 import TermsOfService from "./components/TermsOfService.jsx";
+import WelcomePage from "./components/WelcomePage.jsx";
+import Tooltip from "./components/Tooltip.jsx";
 
 // API configuration - VITE_API_URL is injected by SST during deployment
 // For local development with `npx sst dev`, the URL is automatically provided
@@ -875,12 +877,12 @@ function DashboardPage({ config, onNav }) {
   const todayFormatted = now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
   const monthName = now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
   const cards = [
-    { id:"log",     emoji:"📓", label:"Daily Service Log", desc:todayFormatted,                         primary:true  },
-    { id:"weekly",  emoji:"📄", label:"Weekly Invoice",    desc:`Week of ${week.start}`,               primary:false },
-    { id:"monthly", emoji:"📊", label:"Monthly Report",    desc:monthName,                              primary:false },
-    { id:"history", emoji:"📚", label:"History",           desc:"View Past Invoices",                   primary:false },
-    { id:"import",  emoji:"📥", label:"Import",            desc:"Import Historical Invoices",           primary:false },
-    { id:"profile", emoji:"👤", label:"Edit Profile",      desc:"Invoice & Custom Settings",            primary:false },
+    { id:"log",     emoji:"📓", label:"Daily Service Log", desc:todayFormatted,                         primary:true,  tooltip:"Record details of your work each day" },
+    { id:"weekly",  emoji:"📄", label:"Weekly Invoice",    desc:`Week of ${week.start}`,               primary:false, tooltip:"Generate a professional invoice for the week" },
+    { id:"monthly", emoji:"📊", label:"Monthly Report",    desc:monthName,                              primary:false, tooltip:"Create a summary report for tax purposes" },
+    { id:"history", emoji:"📚", label:"History",           desc:"View Past Invoices",                   primary:false, tooltip:"Browse all your sent and paid invoices" },
+    { id:"import",  emoji:"📥", label:"Import",            desc:"Import Historical Invoices",           primary:false, tooltip:"Bring in invoices from other systems" },
+    { id:"profile", emoji:"👤", label:"Edit Profile",      desc:"Invoice & Custom Settings",            primary:false, tooltip:"Update your contact info and invoice settings" },
   ];
   return (
     <Shell config={config} title={getOccLabels(config).invoiceTitle} subtitle={config.name}>
@@ -897,16 +899,18 @@ function DashboardPage({ config, onNav }) {
         </div>
         <div className="landing-cards">
           {cards.map(c=>(
-            <button key={c.id} onClick={()=>onNav(c.id)} style={{width:"100%",padding:"22px 32px",borderRadius:16,cursor:"pointer",border:c.primary?`2px solid ${acc}`:"2px solid #e8ddd4",background:c.primary?`linear-gradient(135deg,${acc},${tint(acc,0.85)})`:"white",color:c.primary?"white":"#2c1810",textAlign:"left",display:"flex",alignItems:"center",gap:18,boxShadow:c.primary?`0 6px 24px ${tint(acc,0.3)}`:"0 2px 12px rgba(0,0,0,0.06)",transition:"transform 0.1s,box-shadow 0.1s"}}
-              onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=c.primary?`0 10px 28px ${tint(acc,0.35)}`:"0 6px 20px rgba(0,0,0,0.1)";}}
-              onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=c.primary?`0 6px 24px ${tint(acc,0.3)}`:"0 2px 12px rgba(0,0,0,0.06)";}}>
-              <span style={{fontSize:35}}>{c.emoji}</span>
-              <div>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:700,marginBottom:3}}>{c.label}</div>
-                <div style={{fontFamily:"sans-serif",fontSize:15,opacity:0.75}}>{c.desc}</div>
-              </div>
-              <span style={{marginLeft:"auto",fontSize:21,opacity:0.5}}>→</span>
-            </button>
+            <Tooltip key={c.id} text={c.tooltip} position="top">
+              <button onClick={()=>onNav(c.id)} style={{width:"100%",padding:"22px 32px",borderRadius:16,cursor:"pointer",border:c.primary?`2px solid ${acc}`:"2px solid #e8ddd4",background:c.primary?`linear-gradient(135deg,${acc},${tint(acc,0.85)})`:"white",color:c.primary?"white":"#2c1810",textAlign:"left",display:"flex",alignItems:"center",gap:18,boxShadow:c.primary?`0 6px 24px ${tint(acc,0.3)}`:"0 2px 12px rgba(0,0,0,0.06)",transition:"transform 0.1s,box-shadow 0.1s"}}
+                onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=c.primary?`0 10px 28px ${tint(acc,0.35)}`:"0 6px 20px rgba(0,0,0,0.1)";}}
+                onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=c.primary?`0 6px 24px ${tint(acc,0.3)}`:"0 2px 12px rgba(0,0,0,0.06)";}}>
+                <span style={{fontSize:35}}>{c.emoji}</span>
+                <div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:700,marginBottom:3}}>{c.label}</div>
+                  <div style={{fontFamily:"sans-serif",fontSize:15,opacity:0.75}}>{c.desc}</div>
+                </div>
+                <span style={{marginLeft:"auto",fontSize:21,opacity:0.5}}>→</span>
+              </button>
+            </Tooltip>
           ))}
         </div>
         {/* Clickable "Saving to" — navigates to profile folder section */}
@@ -916,6 +920,29 @@ function DashboardPage({ config, onNav }) {
           onMouseLeave={e=>{e.currentTarget.style.borderColor="#d0c0b0";e.currentTarget.style.color="#9a8070";}}>
           📁 Saving to <span style={{fontFamily:"monospace"}}>{config.saveFolder}</span> — click to change
         </button>
+        {/* Beta feedback link */}
+        <a
+          href="mailto:feedback@goinvoi.com?subject=Invoi Beta Feedback"
+          style={{
+            fontSize:13,
+            color:"#9a8070",
+            background:"none",
+            border:"1px solid #d0c0b0",
+            borderRadius:8,
+            padding:"7px 15px",
+            cursor:"pointer",
+            marginTop:8,
+            textDecoration:"none",
+            display:"inline-flex",
+            alignItems:"center",
+            gap:6,
+            transition:"all 0.15s"
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=acc;e.currentTarget.style.color=acc;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="#d0c0b0";e.currentTarget.style.color="#9a8070";}}
+        >
+          💬 Send Feedback
+        </a>
       </div>
     </Shell>
   );
@@ -3669,6 +3696,7 @@ export default function App() {
   const [configError, setConfigError] = useState(null);
   const [helloMessage, setHelloMessage] = useState(null); // TODO: REMOVE AFTER PHASE 0
   const [authChecked, setAuthChecked] = useState(false);
+  const [firstRunChecked, setFirstRunChecked] = useState(false);
 
   // TODO: REMOVE AFTER PHASE 0 - Temporary test code for end-to-end verification only
   // [Phase 0] Test end-to-end browser-to-Lambda flow
@@ -3728,6 +3756,25 @@ export default function App() {
     return () => abortController.abort();
   }, [authChecked]);
 
+  // [Phase 6] First-run detection - show welcome page for new users
+  // Detects if user has incomplete profile (never filled in their info)
+  useEffect(() => {
+    if (loading || !authChecked || !isAuthenticated()) return;
+    if (firstRunChecked) return;
+
+    // Check if this is a first-time user (has default/incomplete profile data)
+    const isNewUser = !config.name ||
+                      config.name === "Jane Doe" ||
+                      !config.clientName ||
+                      config.clientName === "Client Agency";
+
+    if (isNewUser && page === "menu") {
+      setPage("welcome");
+    }
+
+    setFirstRunChecked(true);
+  }, [loading, authChecked, config, page, firstRunChecked]);
+
   const handleNav = (dest) => {
     if (dest==="profile-folder") { setScrollToFolder(true); setPage("profile"); }
     else { setScrollToFolder(false); setPage(dest); }
@@ -3783,6 +3830,7 @@ export default function App() {
     </div>
   ) : null;
 
+  if (page==="welcome") return <WelcomePage onGetStarted={()=>setPage("profile")} onNavigate={setPage} />;
   if (page==="log")     return <>{ErrorBanner}{HelloBanner}<DailyLogPage config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="weekly")  return <>{ErrorBanner}{HelloBanner}<WeeklyPage  config={config} onBack={()=>setPage("menu")}/></>;
   if (page==="monthly") return <>{ErrorBanner}{HelloBanner}<MonthlyPage config={config} onBack={()=>setPage("menu")}/></>;
