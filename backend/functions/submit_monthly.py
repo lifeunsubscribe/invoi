@@ -14,6 +14,7 @@ from services.db_service import query_invoices, get_user, put_invoice, get_invoi
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from services.logging_config import setup_logging
+from services.rate_limit import check_rate_limit
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
@@ -82,6 +83,11 @@ def handler(event, context):
                 'headers': headers,
                 'body': json.dumps({'error': 'Invalid or expired token'})
             }
+
+        # Per-user rate limiting (5 submissions per 60s window)
+        rate_response = check_rate_limit(user_id, max_requests=5, window_seconds=60)
+        if rate_response:
+            return rate_response
 
         # Parse request body
         body = event.get('body', '{}')
