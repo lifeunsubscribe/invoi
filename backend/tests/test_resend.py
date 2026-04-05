@@ -276,7 +276,9 @@ class TestResendHandler:
         body = json.loads(response['body'])
         assert 'Cannot resend more than' in body['error']
 
-    def test_lambda_response_has_no_cors_headers(self):
+    @patch('functions.resend.get_user')
+    @patch('functions.resend.get_invoice')
+    def test_lambda_response_has_no_cors_headers(self, mock_get_invoice, mock_get_user):
         """Lambda responses should not include CORS headers (API Gateway handles them)"""
         event = {
             'requestContext': {
@@ -305,9 +307,7 @@ class TestResendHandler:
 
         os.environ['InvoiStorage'] = 'test-bucket'
 
-        with patch('functions.resend.get_user', return_value=mock_get_user.return_value):
-            with patch('functions.resend.get_invoice', return_value=None):
-                response = handler(event, {})
+        response = handler(event, {})
 
         assert response['statusCode'] == 200
         # Lambda should NOT set CORS headers - API Gateway handles them
