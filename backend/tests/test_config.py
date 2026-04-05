@@ -322,22 +322,208 @@ class TestValidation:
         error = validate_profile_fields(data)
         assert error is None
 
+    def test_validate_name_too_long(self):
+        """Validation should fail when name exceeds 200 characters"""
+        data = {
+            'name': 'A' * 201,  # 201 characters
+            'email': 'test@example.com',
+            'rate': 25.0
+        }
+        error = validate_profile_fields(data)
+        assert error is not None
+        assert 'Name cannot exceed 200 characters' in error
+
+    def test_validate_name_at_max_length(self):
+        """Validation should pass when name is exactly 200 characters"""
+        data = {
+            'name': 'A' * 200,  # Exactly 200 characters
+            'email': 'test@example.com',
+            'rate': 25.0
+        }
+        error = validate_profile_fields(data)
+        assert error is None
+
+    def test_validate_email_too_long(self):
+        """Validation should fail when email exceeds 254 characters"""
+        # Create email with 255 characters
+        local_part = 'a' * 240
+        email = f'{local_part}@example.com'  # 255 total chars
+        data = {
+            'name': 'Test User',
+            'email': email,
+            'rate': 25.0
+        }
+        error = validate_profile_fields(data)
+        assert error is not None
+        assert 'Email cannot exceed 254 characters' in error
+
+    def test_validate_email_at_max_length(self):
+        """Validation should pass when email is exactly 254 characters"""
+        # Create email with 254 characters
+        local_part = 'a' * 239
+        email = f'{local_part}@example.com'  # 254 total chars
+        data = {
+            'name': 'Test User',
+            'email': email,
+            'rate': 25.0
+        }
+        error = validate_profile_fields(data)
+        assert error is None
+
+    def test_validate_optional_email_field_too_long(self):
+        """Validation should fail when optional email fields exceed 254 characters"""
+        data = {
+            'name': 'Test User',
+            'email': 'test@example.com',
+            'rate': 25.0,
+            'personalEmail': 'a' * 255 + '@example.com'
+        }
+        error = validate_profile_fields(data)
+        assert error is not None
+        assert 'personalEmail cannot exceed 254 characters' in error
+
+    def test_validate_optional_email_field_invalid_format(self):
+        """Validation should fail when optional email fields have invalid format"""
+        invalid_emails = [
+            ('personalEmail', 'not-an-email'),
+            ('accountantEmail', 'missing@domain'),
+            ('clientEmail', '@nodomain.com'),
+            ('personalEmail', 'no-at-sign.com'),
+        ]
+        for field, invalid_email in invalid_emails:
+            data = {
+                'name': 'Test User',
+                'email': 'test@example.com',
+                'rate': 25.0,
+                field: invalid_email
+            }
+            error = validate_profile_fields(data)
+            assert error is not None
+            assert field in error
+            assert 'valid email address' in error
+
+    def test_validate_client_name_too_long(self):
+        """Validation should fail when clientName exceeds 200 characters"""
+        data = {
+            'name': 'Test User',
+            'email': 'test@example.com',
+            'rate': 25.0,
+            'clientName': 'B' * 201
+        }
+        error = validate_profile_fields(data)
+        assert error is not None
+        assert 'clientName cannot exceed 200 characters' in error
+
+    def test_validate_short_text_field_too_long(self):
+        """Validation should fail when short text fields exceed 500 characters"""
+        data = {
+            'name': 'Test User',
+            'email': 'test@example.com',
+            'rate': 25.0,
+            'address': 'X' * 501
+        }
+        error = validate_profile_fields(data)
+        assert error is not None
+        assert 'address cannot exceed 500 characters' in error
+
+    def test_validate_short_text_field_at_max_length(self):
+        """Validation should pass when short text field is exactly 500 characters"""
+        data = {
+            'name': 'Test User',
+            'email': 'test@example.com',
+            'rate': 25.0,
+            'address': 'X' * 500
+        }
+        error = validate_profile_fields(data)
+        assert error is None
+
+    def test_validate_invoice_note_too_long(self):
+        """Validation should fail when invoiceNote exceeds 2000 characters"""
+        data = {
+            'name': 'Test User',
+            'email': 'test@example.com',
+            'rate': 25.0,
+            'invoiceNote': 'N' * 2001
+        }
+        error = validate_profile_fields(data)
+        assert error is not None
+        assert 'invoiceNote cannot exceed 2000 characters' in error
+
+    def test_validate_invoice_note_at_max_length(self):
+        """Validation should pass when invoiceNote is exactly 2000 characters"""
+        data = {
+            'name': 'Test User',
+            'email': 'test@example.com',
+            'rate': 25.0,
+            'invoiceNote': 'N' * 2000
+        }
+        error = validate_profile_fields(data)
+        assert error is None
+
+    def test_validate_id_field_too_long(self):
+        """Validation should fail when ID fields exceed 100 characters"""
+        data = {
+            'name': 'Test User',
+            'email': 'test@example.com',
+            'rate': 25.0,
+            'activeClientId': 'I' * 101
+        }
+        error = validate_profile_fields(data)
+        assert error is not None
+        assert 'activeClientId cannot exceed 100 characters' in error
+
+    def test_validate_multiple_optional_fields_within_limits(self):
+        """Validation should pass when multiple optional fields are within limits"""
+        data = {
+            'name': 'Test User',
+            'email': 'test@example.com',
+            'rate': 25.0,
+            'address': 'X' * 500,
+            'invoiceNote': 'N' * 2000,
+            'clientName': 'C' * 200,
+            'personalEmail': 'a' * 240 + '@example.com'
+        }
+        error = validate_profile_fields(data)
+        assert error is None
+
 
 class TestCORS:
-    """Tests for CORS handling"""
+    """Tests for CORS handling
 
-    def test_options_request_returns_200(self):
-        """OPTIONS preflight request should return 200 with CORS headers"""
+    Note: CORS is now handled by API Gateway (configured in sst.config.ts).
+    Lambda functions no longer set CORS headers directly.
+    API Gateway automatically adds CORS headers based on the configuration.
+    """
+
+    def test_lambda_response_has_no_cors_headers(self):
+        """Lambda responses should not include CORS headers (API Gateway handles them)"""
         event = {
             'requestContext': {
-                'http': {'method': 'OPTIONS'}
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
             },
             'headers': {'Authorization': 'Bearer valid-token'}
         }
 
-        response = handler(event, {})
+        # Mock existing user data
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'email': 'test@example.com',
+            'rate': 25.0
+        }
+
+        with patch('functions.config.get_user', return_value=mock_user):
+            response = handler(event, {})
 
         assert response['statusCode'] == 200
-        assert 'Access-Control-Allow-Origin' in response['headers']
-        assert 'Access-Control-Allow-Methods' in response['headers']
-        assert 'Access-Control-Allow-Headers' in response['headers']
+        # Lambda should NOT set CORS headers - API Gateway handles them
+        assert 'Access-Control-Allow-Origin' not in response['headers']
+        assert 'Access-Control-Allow-Methods' not in response['headers']
+        assert 'Access-Control-Allow-Headers' not in response['headers']
+        # But Content-Type should still be set
+        assert response['headers']['Content-Type'] == 'application/json'

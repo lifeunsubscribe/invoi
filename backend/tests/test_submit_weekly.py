@@ -350,18 +350,97 @@ class TestSubmitWeekly:
         # Total = $1623.75
         assert body['totalPay'] == 1623.75
 
-    def test_cors_preflight(self):
-        """OPTIONS request should return 200 with CORS headers"""
+    def test_lambda_response_has_no_cors_headers(self):
+        """Lambda responses should not include CORS headers (API Gateway handles them)"""
         event = {
-            'requestContext': {'http': {'method': 'OPTIONS'}},
-            'headers': {}
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'hours': {
+                    'Monday': 8,
+                    'Tuesday': 8,
+                    'Wednesday': 8,
+                    'Thursday': 8,
+                    'Friday': 8,
+                    'Saturday': 0,
+                    'Sunday': 0
+                },
+                'week': {
+                    'start': '2026-03-24',
+                    'end': '2026-03-30',
+                    'invNum': 'INV-20260324'
+                },
+                'clientEmail': 'client@example.com',
+                'accountantEmail': 'accountant@example.com',
+                'saveOnly': True
+            })
         }
 
-        response = handler(event, {})
+        # Mock user config with all required fields
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'address': '123 Main St',
+            'personalEmail': 'test@example.com',
+            'rate': 28.00,
+            'template': 'morning-light',
+            'signatureFont': 'Dancing Script',
+            'paymentTerms': 'receipt',
+            'taxEnabled': False,
+            'invoiceNumberConfig': {
+                'prefix': 'INV',
+                'includeYear': False,
+                'separator': '-',
+                'padding': 3,
+                'nextNum': 1
+            },
+            'activeClientId': 'client-1',
+            'clients': [
+                {
+                    'id': 'client-1',
+                    'name': 'Test Client',
+                    'email': 'client@example.com'
+                }
+            ]
+        }
+
+        # Mock PDF generation returning bytes
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_weekly.get_user', return_value=mock_user):
+                with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
+                    with patch('functions.submit_weekly.save_pdf_to_s3'):
+                        with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                            with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                # Mock DynamoDB client for TransactWriteItems
+                                mock_dynamodb_client = MagicMock()
+                                mock_boto_client.return_value = mock_dynamodb_client
+
+                                # Mock DynamoDB resource for put_item
+                                mock_table = MagicMock()
+                                mock_boto_resource.return_value.Table.return_value = mock_table
+
+                                response = handler(event, {})
 
         assert response['statusCode'] == 200
-        assert 'Access-Control-Allow-Origin' in response['headers']
-        assert response['headers']['Access-Control-Allow-Origin'] == '*'
+        # Lambda should NOT set CORS headers - API Gateway handles them
+        assert 'Access-Control-Allow-Origin' not in response['headers']
+        assert 'Access-Control-Allow-Methods' not in response['headers']
+        assert 'Access-Control-Allow-Headers' not in response['headers']
+        # But Content-Type should still be set
+        assert response['headers']['Content-Type'] == 'application/json'
 
     def test_calculate_due_date_receipt(self):
         """Due date calculation for 'receipt' payment terms"""

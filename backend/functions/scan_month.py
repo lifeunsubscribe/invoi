@@ -7,10 +7,12 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import query_invoices
+from services.logging_config import setup_logging
 from botocore.exceptions import ClientError
 
+# Configure logging for this Lambda function
+setup_logging()
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 def handler(event, context):
@@ -26,26 +28,18 @@ def handler(event, context):
         400: Invalid query parameters
         401: Missing or invalid authorization
         500: Server error
+
+    Note: CORS is handled by API Gateway (configured in sst.config.ts).
+    Lambda functions should not set CORS headers.
     """
-    # CORS headers for all responses
+    # Response headers
     headers = {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }
 
     try:
         # Extract HTTP method (supports both API Gateway v1 and v2 formats)
         http_method = event.get('requestContext', {}).get('http', {}).get('method') or event.get('httpMethod', 'GET')
-
-        # Handle CORS preflight requests before auth check
-        if http_method == 'OPTIONS':
-            return {
-                'statusCode': 200,
-                'headers': headers,
-                'body': ''
-            }
 
         # Extract userId from JWT claims
         auth_header = event.get('headers', {}).get('authorization') or event.get('headers', {}).get('Authorization')

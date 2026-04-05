@@ -11,9 +11,11 @@ from botocore.exceptions import ClientError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_user, put_user
+from services.logging_config import setup_logging
 
+# Configure logging for this Lambda function
+setup_logging()
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # S3 client for logo storage
 s3_client = boto3.client('s3')
@@ -61,26 +63,18 @@ def handler(event, context):
     DELETE: Remove logo from S3, clear logoKey from user record
 
     All methods require valid JWT in Authorization header.
+
+    Note: CORS is handled by API Gateway (configured in sst.config.ts).
+    Lambda functions should not set CORS headers.
     """
-    # CORS headers for all responses
+    # Response headers
     headers = {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }
 
     try:
         # Extract HTTP method (supports both API Gateway v1 and v2 formats)
         http_method = event.get('requestContext', {}).get('http', {}).get('method') or event.get('httpMethod', 'POST')
-
-        # Handle CORS preflight requests before auth check
-        if http_method == 'OPTIONS':
-            return {
-                'statusCode': 200,
-                'headers': headers,
-                'body': ''
-            }
 
         # Extract userId from JWT claims
         auth_header = event.get('headers', {}).get('authorization') or event.get('headers', {}).get('Authorization')
