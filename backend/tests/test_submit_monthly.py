@@ -342,3 +342,68 @@ class TestSubmitMonthly:
         # Verify PDF was NOT regenerated (functions not called)
         mock_query.assert_not_called()
         mock_generate.assert_not_called()
+
+    def test_submit_monthly_partial_corrupted_report_returns_none_values(self):
+        """POST for partial/corrupted existing report should return None values for missing fields"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'year': 2026,
+                'month': 3,
+                'send': False
+            })
+        }
+
+        # Mock user config
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'rate': 28.00,
+            'template': 'morning-light'
+        }
+
+        # Mock partial/corrupted existing report - missing critical fields
+        # This simulates a scenario where the database write was interrupted
+        # or the report was created before certain fields were added
+        corrupted_report = {
+            'userId': 'user-123',
+            'invoiceId': 'RPT-2026-03',
+            'type': 'monthly',
+            'pdfKey': 'users/user-123/reports/RPT-2026-03.pdf',
+            'createdAt': '2026-03-31T10:00:00Z'
+            # Missing: status, year, month, monthLabel, weekCount, totalHours, totalPay
+        }
+
+        with patch('functions.submit_monthly.get_user', return_value=mock_user):
+            with patch('functions.submit_monthly.get_invoice', return_value=corrupted_report):
+                with patch('functions.submit_monthly.query_invoices') as mock_query:
+                    with patch('functions.submit_monthly.generate_monthly_report') as mock_generate:
+                        response = handler(event, {})
+
+        # Should return 200 with the corrupted report data
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+
+        # Verify basic fields are returned
+        assert body['reportId'] == 'RPT-2026-03'
+        assert body['s3Key'] == 'users/user-123/reports/RPT-2026-03.pdf'
+        assert body['alreadyExists'] is True
+
+        # Verify missing fields return None (this is the bug scenario)
+        assert body['monthLabel'] is None
+        assert body['totalHours'] is None
+        assert body['totalPay'] is None
+        assert body['weekCount'] is None
+        assert body['status'] is None
+
+        # Verify PDF was NOT regenerated (idempotency behavior maintained)
+        mock_query.assert_not_called()
+        mock_generate.assert_not_called()
