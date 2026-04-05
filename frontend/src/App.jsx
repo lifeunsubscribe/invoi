@@ -3725,7 +3725,7 @@ export default function App() {
     if (!authenticated) {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   // Fetch config on app mount (only for authenticated users)
   // [Phase 1] API calls now include Authorization header from auth.jsx
@@ -3754,7 +3754,7 @@ export default function App() {
         }
       });
     return () => abortController.abort();
-  }, [authChecked]);
+  }, [authChecked, isAuthenticated, getAuthToken]);
 
   // [Phase 6] First-run detection - show welcome page for new users
   // Detects if user has incomplete profile (never filled in their info)
@@ -3773,7 +3773,7 @@ export default function App() {
     }
 
     setFirstRunChecked(true);
-  }, [loading, authChecked, config, page, firstRunChecked, setPage]);
+  }, [loading, authChecked, config, page, firstRunChecked, setPage, isAuthenticated]);
 
   const handleNav = (dest) => {
     if (dest==="profile-folder") { setScrollToFolder(true); setPage("profile"); }
