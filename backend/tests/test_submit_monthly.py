@@ -343,8 +343,8 @@ class TestSubmitMonthly:
         mock_query.assert_not_called()
         mock_generate.assert_not_called()
 
-    def test_submit_monthly_partial_corrupted_report_returns_none_values(self):
-        """POST for partial/corrupted existing report should return None values for missing fields"""
+    def test_submit_monthly_partial_corrupted_report_regenerates(self):
+        """POST for partial/corrupted existing report should regenerate the report with complete data"""
         event = {
             'requestContext': {
                 'http': {'method': 'POST'},
@@ -367,7 +367,8 @@ class TestSubmitMonthly:
             'userId': 'user-123',
             'name': 'Test User',
             'rate': 28.00,
-            'template': 'morning-light'
+            'template': 'morning-light',
+            'signatureFont': 'Dancing Script'
         }
 
         # Mock partial/corrupted existing report - missing critical fields
@@ -382,28 +383,51 @@ class TestSubmitMonthly:
             # Missing: status, year, month, monthLabel, weekCount, totalHours, totalPay
         }
 
-        with patch('functions.submit_monthly.get_user', return_value=mock_user):
-            with patch('functions.submit_monthly.get_invoice', return_value=corrupted_report):
-                with patch('functions.submit_monthly.query_invoices') as mock_query:
-                    with patch('functions.submit_monthly.generate_monthly_report') as mock_generate:
-                        response = handler(event, {})
+        # Mock weekly invoices for regeneration
+        mock_weekly_invoices = [
+            {
+                'invoiceId': 'INV-20260301',
+                'weekStart': '2026-03-01',
+                'weekEnd': '2026-03-07',
+                'totalHours': 40
+            },
+            {
+                'invoiceId': 'INV-20260308',
+                'weekStart': '2026-03-08',
+                'weekEnd': '2026-03-14',
+                'totalHours': 38
+            }
+        ]
 
-        # Should return 200 with the corrupted report data
+        # Mock PDF generation
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        with patch.dict(os.environ, {
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_monthly.get_user', return_value=mock_user):
+                with patch('functions.submit_monthly.get_invoice', return_value=corrupted_report):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices) as mock_query:
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes) as mock_generate:
+                            with patch('functions.submit_monthly.save_pdf_to_s3') as mock_save_pdf:
+                                with patch('functions.submit_monthly.put_invoice') as mock_put_invoice:
+                                    response = handler(event, {})
+
+        # Should return 200 with regenerated report data
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
 
-        # Verify basic fields are returned
+        # Verify regenerated report has complete data (not None values)
         assert body['reportId'] == 'RPT-2026-03'
         assert body['s3Key'] == 'users/user-123/reports/RPT-2026-03.pdf'
-        assert body['alreadyExists'] is True
+        assert body['monthLabel'] == 'March 2026'
+        assert body['totalHours'] == 78  # 40 + 38
+        assert body['totalPay'] == 2184.00  # 78 * 28.00
+        assert body['weekCount'] == 2
+        assert body['status'] == 'draft'
 
-        # Verify missing fields return None (this is the bug scenario)
-        assert body['monthLabel'] is None
-        assert body['totalHours'] is None
-        assert body['totalPay'] is None
-        assert body['weekCount'] is None
-        assert body['status'] is None
-
-        # Verify PDF was NOT regenerated (idempotency behavior maintained)
-        mock_query.assert_not_called()
-        mock_generate.assert_not_called()
+        # Verify PDF WAS regenerated (corrupted report triggers regeneration)
+        mock_query.assert_called_once()
+        mock_generate.assert_called_once()
+        mock_save_pdf.assert_called_once()
+        mock_put_invoice.assert_called_once()
