@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getAuthToken } from "../auth.jsx";
 
 // API configuration
@@ -94,6 +94,13 @@ function findMonthlyReport(invoice, allInvoices) {
  * - Sequential navigation: ← prev / next →
  * - "Mark as paid" toggle with micro-animation
  * - Close button returns to view
+ *
+ * Accessibility:
+ * - Focus trapping: Tab/Shift+Tab cycles within modal
+ * - Auto-focus on close button when modal opens
+ * - Focus restoration to trigger element when modal closes
+ * - ARIA attributes: role="dialog", aria-modal="true"
+ * - Escape key to close
  */
 export default function InvoiceDetailPanel({
   invoice,
@@ -106,6 +113,10 @@ export default function InvoiceDetailPanel({
   const [isAnimating, setIsAnimating] = useState(false);
   const [showPaidAnimation, setShowPaidAnimation] = useState(false);
 
+  // Refs for focus management and trapping
+  const panelRef = useRef(null);
+  const previouslyFocusedElement = useRef(null);
+
   // Trigger slide-in animation on mount
   // The panel starts off-screen (translateX(100%)) and slides in after mount
   useEffect(() => {
@@ -114,11 +125,55 @@ export default function InvoiceDetailPanel({
     return () => clearTimeout(timer);
   }, []);
 
-  // Keyboard accessibility: Close panel on Escape key
+  // Focus management: Store previously focused element and set initial focus
+  useEffect(() => {
+    // Store the element that had focus before the modal opened
+    previouslyFocusedElement.current = document.activeElement;
+
+    // Set focus to the panel container after the slide-in animation
+    const focusTimer = setTimeout(() => {
+      if (panelRef.current) {
+        // Find the close button (first focusable button in the header)
+        const closeButton = panelRef.current.querySelector('button');
+        if (closeButton) {
+          closeButton.focus();
+        }
+      }
+    }, 350); // Wait for animation (300ms) + small buffer
+
+    return () => clearTimeout(focusTimer);
+  }, []);
+
+  // Focus trap: Prevent Tab from leaving the modal
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Close panel on Escape key
       if (e.key === "Escape") {
         handleClose();
+        return;
+      }
+
+      // Focus trap: Handle Tab and Shift+Tab
+      if (e.key === "Tab" && panelRef.current) {
+        const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled])';
+        const focusableElements = panelRef.current.querySelectorAll(focusableSelector);
+        const focusableArray = Array.from(focusableElements);
+
+        if (focusableArray.length === 0) return;
+
+        const firstFocusable = focusableArray[0];
+        const lastFocusable = focusableArray[focusableArray.length - 1];
+
+        // Shift+Tab on first element: cycle to last
+        if (e.shiftKey && document.activeElement === firstFocusable) {
+          e.preventDefault();
+          lastFocusable.focus();
+        }
+        // Tab on last element: cycle to first
+        else if (!e.shiftKey && document.activeElement === lastFocusable) {
+          e.preventDefault();
+          firstFocusable.focus();
+        }
       }
     };
 
@@ -133,6 +188,10 @@ export default function InvoiceDetailPanel({
     // Wait for the 300ms CSS transition to complete before removing the component
     setTimeout(() => {
       onClose && onClose();
+      // Restore focus to the element that was focused before the modal opened
+      if (previouslyFocusedElement.current && typeof previouslyFocusedElement.current.focus === 'function') {
+        previouslyFocusedElement.current.focus();
+      }
     }, 300);
   };
 
@@ -263,10 +322,15 @@ export default function InvoiceDetailPanel({
           transition: "opacity 300ms ease-out"
         }}
         onClick={handleClose}
+        aria-hidden="true"
       />
 
       {/* Panel */}
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="invoice-detail-title"
         style={{
           position: "fixed",
           top: 0,
@@ -298,12 +362,15 @@ export default function InvoiceDetailPanel({
             alignItems: "center",
             gap: 12
           }}>
-            <h2 style={{
-              margin: 0,
-              fontSize: 18,
-              fontWeight: 700,
-              color: chrome.brightText
-            }}>
+            <h2
+              id="invoice-detail-title"
+              style={{
+                margin: 0,
+                fontSize: 18,
+                fontWeight: 700,
+                color: chrome.brightText
+              }}
+            >
               Invoice Details
             </h2>
 
@@ -324,6 +391,7 @@ export default function InvoiceDetailPanel({
 
           <button
             onClick={handleClose}
+            aria-label="Close invoice details"
             style={{
               background: "none",
               border: "none",
