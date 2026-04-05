@@ -237,13 +237,12 @@ describe('PKCE Utilities', () => {
       expect(retrievePKCEVerifier()).toBeNull();
     });
 
-    it('should handle multiple concurrent OAuth flows in different tabs', async () => {
-      // Each setupPKCE() call simulates a different browser tab
+    it('should overwrite verifier when setupPKCE is called multiple times in same tab', async () => {
+      // Multiple setupPKCE() calls in the same tab/sessionStorage context
       const flow1 = await setupPKCE();
       const flow2 = await setupPKCE();
 
-      // In reality, sessionStorage is isolated per tab, so each would have its own verifier
-      // This test simulates the same tab, so the second flow overwrites the first
+      // The second flow overwrites the first in the same sessionStorage
       expect(retrievePKCEVerifier()).toBe(flow2.verifier);
 
       // But each flow has unique values
