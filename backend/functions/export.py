@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import os
 import csv
@@ -13,6 +14,9 @@ from decimal import Decimal
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_invoice
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # Initialize AWS clients
 s3_client = boto3.client('s3')
@@ -134,7 +138,7 @@ def handler(event, context):
             'body': json.dumps({'error': 'Invalid JSON in request body'})
         }
     except Exception as e:
-        print(f"Unhandled error in export handler: {str(e)}")
+        logger.error(f"Unhandled error in export handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -199,7 +203,7 @@ def _handle_csv_export(user_id, invoices, headers):
         # Upload to S3
         bucket_name = os.environ.get('InvoiStorage')
         if not bucket_name:
-            print("Error: InvoiStorage bucket name not found in environment")
+            logger.error("InvoiStorage bucket name not found in environment")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -241,14 +245,14 @@ def _handle_csv_export(user_id, invoices, headers):
         }
 
     except ClientError as e:
-        print(f"S3 error in CSV export: {str(e)}")
+        logger.error(f"S3 error in CSV export: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to generate CSV export'})
         }
     except Exception as e:
-        print(f"Error in CSV export handler: {str(e)}")
+        logger.error(f"Error in CSV export handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
@@ -269,7 +273,7 @@ def _handle_zip_export(user_id, invoices, headers):
     try:
         bucket_name = os.environ.get('InvoiStorage')
         if not bucket_name:
-            print("Error: InvoiStorage bucket name not found in environment")
+            logger.error("InvoiStorage bucket name not found in environment")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -301,7 +305,7 @@ def _handle_zip_export(user_id, invoices, headers):
                         pdf_count += 1
                     except ClientError as e:
                         error_msg = f"Invoice PDF for {invoice_id}"
-                        print(f"Warning: Could not fetch PDF for {invoice_id}: {str(e)}")
+                        logger.warning(f"Could not fetch PDF for {invoice_id}: {str(e)}")
                         failed_pdfs.append(error_msg)
 
                 # Add log PDF if available
@@ -316,7 +320,7 @@ def _handle_zip_export(user_id, invoices, headers):
                         pdf_count += 1
                     except ClientError as e:
                         error_msg = f"Log PDF for {invoice_id}"
-                        print(f"Warning: Could not fetch log PDF for {invoice_id}: {str(e)}")
+                        logger.warning(f"Could not fetch log PDF for {invoice_id}: {str(e)}")
                         failed_pdfs.append(error_msg)
 
         # Check if we successfully added any PDFs
@@ -377,14 +381,14 @@ def _handle_zip_export(user_id, invoices, headers):
         }
 
     except ClientError as e:
-        print(f"S3 error in ZIP export: {str(e)}")
+        logger.error(f"S3 error in ZIP export: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to generate ZIP export'})
         }
     except Exception as e:
-        print(f"Error in ZIP export handler: {str(e)}")
+        logger.error(f"Error in ZIP export handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,

@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import os
 
@@ -7,6 +8,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import query_invoices
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 def handler(event, context):
@@ -123,14 +127,14 @@ def handler(event, context):
         }
 
     except ClientError as e:
-        print(f"DynamoDB error in GET /api/scan-month: {str(e)}")
+        logger.error(f"DynamoDB error in GET /api/scan-month: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to query invoices'})
         }
     except Exception as e:
-        print(f"Unhandled error in scan_month handler: {str(e)}")
+        logger.error(f"Unhandled error in scan_month handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,

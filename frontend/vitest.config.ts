@@ -34,7 +34,7 @@ export default defineConfig({
     },
 
     // Test match patterns
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
 
     // Exclude patterns
     exclude: [
