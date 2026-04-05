@@ -50,6 +50,9 @@ def send_email(to_addresses, subject, body_text, attachments=None, from_email="n
     if isinstance(to_addresses, str):
         to_addresses = [to_addresses]
 
+    attachment_count = len(attachments) if attachments else 0
+    logger.info(f"Sending email via SES: subject='{subject}' to={len(to_addresses)} recipients attachments={attachment_count}")
+
     # Create MIME multipart message
     msg = MIMEMultipart()
     msg['Subject'] = subject
@@ -79,6 +82,8 @@ def send_email(to_addresses, subject, body_text, attachments=None, from_email="n
             Destinations=to_addresses,
             RawMessage={'Data': msg.as_string()}
         )
+        message_id = response.get('MessageId', 'unknown')
+        logger.info(f"Successfully sent email via SES: MessageId={message_id} subject='{subject}'")
         return response
     except ClientError as e:
         # Log error and re-raise

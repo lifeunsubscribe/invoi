@@ -22,6 +22,7 @@ Helpers:
 """
 
 import os
+import logging
 import boto3
 from io import BytesIO
 from datetime import datetime, timedelta
@@ -35,6 +36,8 @@ from backend.themes import (
     THEME_ORDER,
     get_theme,
 )
+
+logger = logging.getLogger(__name__)
 
 # S3 client for PDF storage (initialized on first use)
 _s3_client = None
@@ -238,6 +241,7 @@ def _render_html_to_pdf(html_content):
     Raises:
         RuntimeError — if PDF generation fails
     """
+    logger.debug("Rendering HTML to PDF using xhtml2pdf")
     output = BytesIO()
 
     # Convert HTML to PDF using xhtml2pdf (pisa)
@@ -249,6 +253,7 @@ def _render_html_to_pdf(html_content):
     )
 
     if pisa_status.err:
+        logger.error(f"PDF generation failed with {pisa_status.err} errors")
         raise RuntimeError(
             f"PDF generation failed with {pisa_status.err} errors. "
             "Check HTML template for unsupported CSS or malformed markup."
@@ -258,8 +263,10 @@ def _render_html_to_pdf(html_content):
     output.close()
 
     if not pdf_bytes:
+        logger.error("PDF generation produced empty output")
         raise RuntimeError("PDF generation produced empty output")
 
+    logger.info(f"Successfully rendered PDF ({len(pdf_bytes)} bytes)")
     return pdf_bytes
 
 
@@ -286,16 +293,21 @@ def save_pdf_to_s3(pdf_bytes, bucket_name, key):
             f'users/{user_id}/invoices/{year}/{invoice_number}.pdf'
         )
     """
+    logger.info(f"Uploading PDF to S3: bucket={bucket_name} key={key} size={len(pdf_bytes)} bytes")
     s3 = _get_s3_client()
 
-    s3.put_object(
-        Bucket=bucket_name,
-        Key=key,
-        Body=pdf_bytes,
-        ContentType='application/pdf'
-    )
-
-    return key
+    try:
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=key,
+            Body=pdf_bytes,
+            ContentType='application/pdf'
+        )
+        logger.info(f"Successfully uploaded PDF to S3: {key}")
+        return key
+    except Exception as e:
+        logger.error(f"Failed to upload PDF to S3: {key} - {str(e)}")
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -532,12 +544,15 @@ def generate_weekly_invoice(config, hours, week, template_id,
     Returns:
         bytes — PDF content
     """
-    return render_weekly_pdf(
+    logger.info(f"Generating weekly invoice: template={template_id} week={week} invoice_number={invoice_number}")
+    pdf_bytes = render_weekly_pdf(
         config, hours, week, template_id,
         invoice_number=invoice_number,
         invoice_date=invoice_date,
         logo_data=logo_data
     )
+    logger.info(f"Successfully generated weekly invoice PDF ({len(pdf_bytes)} bytes)")
+    return pdf_bytes
 
 
 def generate_monthly_report(config, week_data, month_label,
@@ -560,7 +575,8 @@ def generate_monthly_report(config, week_data, month_label,
         Required params (config, week_data, month_label) + optional params
         (template_id, signature_font, sign_date, invoice_date) align with Lambda handler usage.
     """
-    return render_monthly_pdf(
+    logger.info(f"Generating monthly report: template={template_id} month={month_label} weeks={len(week_data)}")
+    pdf_bytes = render_monthly_pdf(
         config, week_data, month_label,
         template_id=template_id,
         signature_font=signature_font,
@@ -569,6 +585,8 @@ def generate_monthly_report(config, week_data, month_label,
         invoice_date=invoice_date,
         logo_data=logo_data
     )
+    logger.info(f"Successfully generated monthly report PDF ({len(pdf_bytes)} bytes)")
+    return pdf_bytes
 
 
 def render_weekly_log_pdf(config, client, daily_logs, week_label,
@@ -595,6 +613,7 @@ def render_weekly_log_pdf(config, client, daily_logs, week_label,
     Returns:
         bytes: PDF file contents
     """
+    logger.info(f"Generating weekly service log: template={template_id} week={week_label}")
     _validate_template_id(template_id, LOG_TEMPLATE_FILES)
 
     # Enrich daily_logs with computed fields
@@ -638,4 +657,6 @@ def render_weekly_log_pdf(config, client, daily_logs, week_label,
             f"Failed to render log template '{template_id}': {e}"
         ) from e
 
-    return _render_html_to_pdf(html_content)
+    pdf_bytes = _render_html_to_pdf(html_content)
+    logger.info(f"Successfully generated weekly service log PDF ({len(pdf_bytes)} bytes)")
+    return pdf_bytes

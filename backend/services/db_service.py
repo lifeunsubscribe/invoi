@@ -1,7 +1,10 @@
+import logging
 import boto3
 from os import environ
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger(__name__)
 
 dynamodb = boto3.resource('dynamodb')
 
@@ -28,10 +31,19 @@ def get_user(user_id):
         ClientError: If DynamoDB operation fails
     """
     try:
+        logger.info(f"Fetching user profile for user_id={user_id}")
         table = get_users_table()
         response = table.get_item(Key={'userId': user_id})
-        return response.get('Item')
+        user = response.get('Item')
+
+        if user:
+            logger.info(f"Successfully retrieved user profile for user_id={user_id}")
+        else:
+            logger.info(f"No user profile found for user_id={user_id}")
+
+        return user
     except ClientError as e:
+        logger.error(f"DynamoDB error fetching user {user_id}: {e.response['Error']['Code']} - {str(e)}")
         # Re-raise for caller to handle
         raise
 
@@ -54,10 +66,14 @@ def put_user(user_data):
         raise ValueError("user_data must contain 'userId' field")
 
     try:
+        user_id = user_data['userId']
+        logger.info(f"Updating user profile for user_id={user_id}")
         table = get_users_table()
         table.put_item(Item=user_data)
+        logger.info(f"Successfully updated user profile for user_id={user_id}")
         return user_data
     except ClientError as e:
+        logger.error(f"DynamoDB error updating user {user_data.get('userId')}: {e.response['Error']['Code']} - {str(e)}")
         raise
 
 
@@ -76,6 +92,7 @@ def get_invoice(user_id, invoice_id):
         ClientError: If DynamoDB operation fails
     """
     try:
+        logger.info(f"Fetching invoice invoice_id={invoice_id} for user_id={user_id}")
         table = get_invoices_table()
         response = table.get_item(
             Key={
@@ -83,8 +100,16 @@ def get_invoice(user_id, invoice_id):
                 'invoiceId': invoice_id
             }
         )
-        return response.get('Item')
+        invoice = response.get('Item')
+
+        if invoice:
+            logger.info(f"Successfully retrieved invoice invoice_id={invoice_id}")
+        else:
+            logger.info(f"Invoice not found: invoice_id={invoice_id} for user_id={user_id}")
+
+        return invoice
     except ClientError as e:
+        logger.error(f"DynamoDB error fetching invoice {invoice_id}: {e.response['Error']['Code']} - {str(e)}")
         raise
 
 
@@ -106,10 +131,18 @@ def put_invoice(invoice_data):
         raise ValueError("invoice_data must contain 'userId' and 'invoiceId' fields")
 
     try:
+        user_id = invoice_data['userId']
+        invoice_id = invoice_data['invoiceId']
+        invoice_type = invoice_data.get('type', 'unknown')
+        logger.info(f"Creating/updating invoice invoice_id={invoice_id} type={invoice_type} for user_id={user_id}")
+
         table = get_invoices_table()
         table.put_item(Item=invoice_data)
+
+        logger.info(f"Successfully saved invoice invoice_id={invoice_id}")
         return invoice_data
     except ClientError as e:
+        logger.error(f"DynamoDB error saving invoice {invoice_data.get('invoiceId')}: {e.response['Error']['Code']} - {str(e)}")
         raise
 
 
@@ -152,6 +185,7 @@ def query_invoices(user_id, filters=None):
         filter via Attr condition (line 183-184).
     """
     try:
+        logger.info(f"Querying invoices for user_id={user_id} with filters={filters}")
         table = get_invoices_table()
 
         # Build the key condition for the partition key
@@ -164,10 +198,13 @@ def query_invoices(user_id, filters=None):
 
             if start and end:
                 key_condition = key_condition & Key('invoiceId').between(start, end)
+                logger.debug(f"Date range filter: {start} to {end}")
             elif start:
                 key_condition = key_condition & Key('invoiceId').gte(start)
+                logger.debug(f"Date filter: >= {start}")
             elif end:
                 key_condition = key_condition & Key('invoiceId').lte(end)
+                logger.debug(f"Date filter: <= {end}")
 
         # Build filter expressions for non-key attributes
         filter_expression = None
@@ -203,9 +240,11 @@ def query_invoices(user_id, filters=None):
             response = table.query(**query_params)
             items.extend(response.get('Items', []))
 
+        logger.info(f"Successfully queried {len(items)} invoices for user_id={user_id}")
         return items
 
     except ClientError as e:
+        logger.error(f"DynamoDB error querying invoices for user {user_id}: {e.response['Error']['Code']} - {str(e)}")
         raise
 
 
@@ -234,6 +273,7 @@ def update_invoice_status(user_id, invoice_id, status, paid_at=None):
         raise ValueError(f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}")
 
     try:
+        logger.info(f"Updating invoice status: invoice_id={invoice_id} status={status} for user_id={user_id}")
         table = get_invoices_table()
 
         # Always update the updatedAt timestamp
@@ -278,10 +318,13 @@ def update_invoice_status(user_id, invoice_id, status, paid_at=None):
             ReturnValues='ALL_NEW'
         )
 
+        logger.info(f"Successfully updated invoice status: invoice_id={invoice_id} status={status}")
         return response.get('Attributes')
 
     except ClientError as e:
         # Handle case where invoice doesn't exist
         if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+            logger.error(f"Invoice not found: invoice_id={invoice_id} for user_id={user_id}")
             raise ValueError(f"Invoice {invoice_id} not found for user {user_id}")
+        logger.error(f"DynamoDB error updating invoice status {invoice_id}: {e.response['Error']['Code']} - {str(e)}")
         raise
