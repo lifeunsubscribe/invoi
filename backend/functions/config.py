@@ -196,19 +196,30 @@ def handle_post(user_id, event, headers):
 
 def validate_profile_fields(data):
     """
-    Validate required profile fields.
+    Validate required profile fields and enforce maximum length limits.
 
     Returns error message if validation fails, None if valid.
+
+    Maximum length limits (based on DynamoDB best practices and security):
+    - Email addresses: 254 characters (RFC 5321 standard)
+    - Names: 200 characters
+    - Short text fields: 500 characters
+    - Long text fields (notes): 2000 characters
+    - IDs: 100 characters
     """
-    # Validate name
+    # Validate name (required)
     name = data.get('name', '').strip()
     if not name:
         return 'Name is required and cannot be empty'
+    if len(name) > 200:
+        return 'Name cannot exceed 200 characters'
 
-    # Validate email
+    # Validate email (required)
     email = data.get('email', '').strip()
     if not email:
         return 'Email is required and cannot be empty'
+    if len(email) > 254:
+        return 'Email cannot exceed 254 characters'
 
     # Basic email format validation
     email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
@@ -227,6 +238,47 @@ def validate_profile_fields(data):
             return 'Rate must be a positive number'
     except (ValueError, TypeError):
         return 'Rate must be a valid number'
+
+    # Validate optional field lengths
+    # Email fields (254 chars - RFC 5321 standard)
+    email_fields = ['personalEmail', 'accountantEmail', 'clientEmail']
+    for field in email_fields:
+        value = data.get(field, '')
+        if value:
+            if len(str(value)) > 254:
+                return f'{field} cannot exceed 254 characters'
+            # Validate email format
+            if not re.match(email_pattern, str(value)):
+                return f'{field} must be a valid email address'
+
+    # Name fields (200 chars)
+    name_fields = ['clientName']
+    for field in name_fields:
+        value = data.get(field, '')
+        if value and len(str(value)) > 200:
+            return f'{field} cannot exceed 200 characters'
+
+    # Short text fields (500 chars)
+    short_text_fields = ['address', 'agency', 'saveFolder', 'occupation',
+                         'accent', 'template', 'signatureFont', 'logoKey']
+    for field in short_text_fields:
+        value = data.get(field, '')
+        if value and len(str(value)) > 500:
+            return f'{field} cannot exceed 500 characters'
+
+    # Long text fields (2000 chars)
+    long_text_fields = ['invoiceNote']
+    for field in long_text_fields:
+        value = data.get(field, '')
+        if value and len(str(value)) > 2000:
+            return f'{field} cannot exceed 2000 characters'
+
+    # ID fields (100 chars)
+    id_fields = ['activeClientId', 'logoSize']
+    for field in id_fields:
+        value = data.get(field, '')
+        if value and len(str(value)) > 100:
+            return f'{field} cannot exceed 100 characters'
 
     return None
 
