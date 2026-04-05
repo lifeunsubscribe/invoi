@@ -244,8 +244,12 @@ def validate_profile_fields(data):
     email_fields = ['personalEmail', 'accountantEmail', 'clientEmail']
     for field in email_fields:
         value = data.get(field, '')
-        if value and len(str(value)) > 254:
-            return f'{field} cannot exceed 254 characters'
+        if value:
+            if len(str(value)) > 254:
+                return f'{field} cannot exceed 254 characters'
+            # Validate email format
+            if not re.match(email_pattern, str(value)):
+                return f'{field} must be a valid email address'
 
     # Name fields (200 chars)
     name_fields = ['clientName']

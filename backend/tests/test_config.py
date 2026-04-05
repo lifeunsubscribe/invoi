@@ -382,6 +382,26 @@ class TestValidation:
         assert error is not None
         assert 'personalEmail cannot exceed 254 characters' in error
 
+    def test_validate_optional_email_field_invalid_format(self):
+        """Validation should fail when optional email fields have invalid format"""
+        invalid_emails = [
+            ('personalEmail', 'not-an-email'),
+            ('accountantEmail', 'missing@domain'),
+            ('clientEmail', '@nodomain.com'),
+            ('personalEmail', 'no-at-sign.com'),
+        ]
+        for field, invalid_email in invalid_emails:
+            data = {
+                'name': 'Test User',
+                'email': 'test@example.com',
+                'rate': 25.0,
+                field: invalid_email
+            }
+            error = validate_profile_fields(data)
+            assert error is not None
+            assert field in error
+            assert 'valid email address' in error
+
     def test_validate_client_name_too_long(self):
         """Validation should fail when clientName exceeds 200 characters"""
         data = {
