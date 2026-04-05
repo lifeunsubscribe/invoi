@@ -11,6 +11,8 @@
  * - Provide sign-in/sign-out functions
  */
 
+import { useCallback } from 'react';
+
 /**
  * Get the current authentication token for API requests.
  *
@@ -20,7 +22,7 @@
  * For now, returns a stub token to unblock ProfilePage API integration.
  * The backend config.py currently has stub validation that checks for header presence.
  */
-export function getAuthToken() {
+function getAuthTokenImpl() {
   // TODO [Phase 1]: Replace stub with real token retrieval
   // Real implementation will be:
   // - For Cognito: fetchAuthSession().then(session => session.tokens?.idToken?.toString())
@@ -56,7 +58,7 @@ export function getAuthToken() {
  *
  * TODO [Phase 1]: Implement real auth state check
  */
-export function isAuthenticated() {
+function isAuthenticatedImpl() {
   // TODO [Phase 1]: Check for valid Cognito/Auth0 session
   // Real implementation will check token expiry, refresh if needed
 
@@ -72,6 +74,27 @@ export function isAuthenticated() {
 
   return true; // Stub: assume always authenticated for Phase 1
 }
+
+/**
+ * Hook to get a stable reference to getAuthToken.
+ * Prevents unnecessary re-renders when used in dependency arrays.
+ */
+export function useGetAuthToken() {
+  return useCallback(getAuthTokenImpl, []);
+}
+
+/**
+ * Hook to get a stable reference to isAuthenticated.
+ * Prevents unnecessary re-renders when used in dependency arrays.
+ */
+export function useIsAuthenticated() {
+  return useCallback(isAuthenticatedImpl, []);
+}
+
+// Export the raw functions for backwards compatibility
+// These should only be used outside of React components
+export const getAuthToken = getAuthTokenImpl;
+export const isAuthenticated = isAuthenticatedImpl;
 
 /**
  * Get current authenticated user's email.

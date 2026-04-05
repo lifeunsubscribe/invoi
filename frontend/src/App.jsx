@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { getAuthToken, isAuthenticated } from "./auth.jsx";
+import { useGetAuthToken, useIsAuthenticated } from "./auth.jsx";
 import HistoryPage from "./components/HistoryPage.jsx";
 import LandingPage from "./components/LandingPage.jsx";
 import ImportPage from "./components/ImportPage.jsx";
@@ -3697,6 +3697,11 @@ export default function App() {
   const [helloMessage, setHelloMessage] = useState(null); // TODO: REMOVE AFTER PHASE 0
   const [authChecked, setAuthChecked] = useState(false);
   const [firstRunChecked, setFirstRunChecked] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(false);
+
+  // Get stable references to auth functions to prevent useEffect re-runs
+  const getAuthToken = useGetAuthToken();
+  const isAuthenticated = useIsAuthenticated();
 
   // TODO: REMOVE AFTER PHASE 0 - Temporary test code for end-to-end verification only
   // [Phase 0] Test end-to-end browser-to-Lambda flow
@@ -3745,11 +3750,13 @@ export default function App() {
       .then(configData => {
         if (configData.rate != null) configData.rate = Number(configData.rate) || 0;
         setConfig({ ...defaultConfig, ...configData });
+        setConfigLoaded(true);
         setLoading(false);
       })
       .catch(err => {
         if (err.name !== 'AbortError') {
           setConfigError('Unable to load configuration');
+          setConfigLoaded(true); // Mark as loaded even on error to prevent race condition
           setLoading(false);
         }
       });
@@ -3759,7 +3766,8 @@ export default function App() {
   // [Phase 6] First-run detection - show welcome page for new users
   // Detects if user has incomplete profile (never filled in their info)
   useEffect(() => {
-    if (loading || !authChecked || !isAuthenticated()) return;
+    // Wait for auth check, config load, and ensure user is authenticated
+    if (!authChecked || !configLoaded || !isAuthenticated()) return;
     if (firstRunChecked) return;
 
     // Check if this is a first-time user (has empty/incomplete profile data)
@@ -3773,7 +3781,7 @@ export default function App() {
     }
 
     setFirstRunChecked(true);
-  }, [loading, authChecked, config, page, firstRunChecked, setPage, isAuthenticated]);
+  }, [authChecked, configLoaded, config, page, firstRunChecked, setPage, isAuthenticated]);
 
   const handleNav = (dest) => {
     if (dest==="profile-folder") { setScrollToFolder(true); setPage("profile"); }
