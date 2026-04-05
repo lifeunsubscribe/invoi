@@ -324,20 +324,42 @@ class TestValidation:
 
 
 class TestCORS:
-    """Tests for CORS handling"""
+    """Tests for CORS handling
 
-    def test_options_request_returns_200(self):
-        """OPTIONS preflight request should return 200 with CORS headers"""
+    Note: CORS is now handled by API Gateway (configured in sst.config.ts).
+    Lambda functions no longer set CORS headers directly.
+    API Gateway automatically adds CORS headers based on the configuration.
+    """
+
+    def test_lambda_response_has_no_cors_headers(self):
+        """Lambda responses should not include CORS headers (API Gateway handles them)"""
         event = {
             'requestContext': {
-                'http': {'method': 'OPTIONS'}
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
             },
             'headers': {'Authorization': 'Bearer valid-token'}
         }
 
-        response = handler(event, {})
+        # Mock existing user data
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'email': 'test@example.com',
+            'rate': 25.0
+        }
+
+        with patch('functions.config.get_user', return_value=mock_user):
+            response = handler(event, {})
 
         assert response['statusCode'] == 200
-        assert 'Access-Control-Allow-Origin' in response['headers']
-        assert 'Access-Control-Allow-Methods' in response['headers']
-        assert 'Access-Control-Allow-Headers' in response['headers']
+        # Lambda should NOT set CORS headers - API Gateway handles them
+        assert 'Access-Control-Allow-Origin' not in response['headers']
+        assert 'Access-Control-Allow-Methods' not in response['headers']
+        assert 'Access-Control-Allow-Headers' not in response['headers']
+        # But Content-Type should still be set
+        assert response['headers']['Content-Type'] == 'application/json'

@@ -250,26 +250,18 @@ def handler(event, context):
     - imported: count of successfully imported invoices
     - failed: count of failed imports
     - errors: array of error messages
+
+    Note: CORS is handled by API Gateway (configured in sst.config.ts).
+    Lambda functions should not set CORS headers.
     """
-    # CORS headers for all responses
+    # Response headers
     headers = {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }
 
     try:
         # Extract HTTP method
         http_method = event.get('requestContext', {}).get('http', {}).get('method') or event.get('httpMethod', 'POST')
-
-        # Handle CORS preflight
-        if http_method == 'OPTIONS':
-            return {
-                'statusCode': 200,
-                'headers': headers,
-                'body': ''
-            }
 
         # Extract and validate authorization
         auth_header = event.get('headers', {}).get('authorization') or event.get('headers', {}).get('Authorization')

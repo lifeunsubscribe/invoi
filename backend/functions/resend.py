@@ -34,26 +34,18 @@ def handler(event, context):
         401: Missing or invalid authorization
         404: One or more invoices not found or not owned by user
         500: Server error
+
+    Note: CORS is handled by API Gateway (configured in sst.config.ts).
+    Lambda functions should not set CORS headers.
     """
-    # CORS headers for all responses
+    # Response headers
     headers = {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }
 
     try:
         # Extract HTTP method
         http_method = event.get('requestContext', {}).get('http', {}).get('method') or event.get('httpMethod', 'POST')
-
-        # Handle CORS preflight requests before auth check
-        if http_method == 'OPTIONS':
-            return {
-                'statusCode': 200,
-                'headers': headers,
-                'body': ''
-            }
 
         # Extract userId from JWT claims
         auth_header = event.get('headers', {}).get('authorization') or event.get('headers', {}).get('Authorization')

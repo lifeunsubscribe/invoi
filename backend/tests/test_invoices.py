@@ -854,22 +854,39 @@ class TestGetSingleInvoice:
 
 
 class TestCORS:
-    """Tests for CORS handling"""
+    """Tests for CORS handling
 
-    def test_options_request_returns_200(self):
-        """OPTIONS preflight request should return 200 with CORS headers"""
+    Note: CORS is now handled by API Gateway (configured in sst.config.ts).
+    Lambda functions no longer set CORS headers directly.
+    API Gateway automatically adds CORS headers based on the configuration.
+    """
+
+    def test_lambda_response_has_no_cors_headers(self):
+        """Lambda responses should not include CORS headers (API Gateway handles them)"""
         event = {
             'requestContext': {
-                'http': {'method': 'OPTIONS'}
+                'http': {'method': 'GET'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
             },
-            'headers': {'Authorization': 'Bearer valid-token'}
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'queryStringParameters': None
         }
 
-        response = handler(event, {})
+        mock_invoices = [
+            {'userId': 'user-123', 'invoiceId': 'INV-20260324', 'status': 'sent', 'totalPay': 1120.00},
+        ]
+
+        with patch('functions.invoices.query_invoices', return_value=mock_invoices):
+            response = handler(event, {})
 
         assert response['statusCode'] == 200
-        assert 'Access-Control-Allow-Origin' in response['headers']
-        assert 'Access-Control-Allow-Methods' in response['headers']
-        assert 'Access-Control-Allow-Headers' in response['headers']
-        assert 'GET' in response['headers']['Access-Control-Allow-Methods']
-        assert 'PATCH' in response['headers']['Access-Control-Allow-Methods']
+        # Lambda should NOT set CORS headers - API Gateway handles them
+        assert 'Access-Control-Allow-Origin' not in response['headers']
+        assert 'Access-Control-Allow-Methods' not in response['headers']
+        assert 'Access-Control-Allow-Headers' not in response['headers']
+        # But Content-Type should still be set
+        assert response['headers']['Content-Type'] == 'application/json'
