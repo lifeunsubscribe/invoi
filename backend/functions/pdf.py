@@ -9,9 +9,11 @@ from botocore.exceptions import ClientError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_invoice
+from services.logging_config import setup_logging
 
+# Configure logging for this Lambda function
+setup_logging()
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # Initialize S3 client
 s3_client = boto3.client('s3')

@@ -12,10 +12,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from services.db_service import get_user
 from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
 from services.mail_service import send_weekly_email
+from services.logging_config import setup_logging
 from botocore.exceptions import ClientError
 
+# Configure logging for this Lambda function
+setup_logging()
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # S3 client for logo fetching
 s3_client = boto3.client('s3')

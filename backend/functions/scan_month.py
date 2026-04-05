@@ -7,10 +7,12 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import query_invoices
+from services.logging_config import setup_logging
 from botocore.exceptions import ClientError
 
+# Configure logging for this Lambda function
+setup_logging()
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 def handler(event, context):
