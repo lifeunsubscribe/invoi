@@ -9,7 +9,34 @@
  * - Handle OAuth flow with Google
  * - Store/refresh JWT tokens
  * - Provide sign-in/sign-out functions
+ *
+ * SECURITY: PKCE Implementation Required
+ * PKCE (Proof Key for Code Exchange) utilities are available in utils/pkce.js
+ * and MUST be used when implementing the real OAuth authorization code flow.
+ *
+ * Integration steps:
+ * 1. Import { setupPKCE, retrievePKCEVerifier, clearPKCEVerifier } from './utils/pkce'
+ * 2. Before redirecting to Cognito OAuth:
+ *    const { challenge } = await setupPKCE();
+ *    const authUrl = `${cognitoUrl}/oauth2/authorize?
+ *      response_type=code&
+ *      client_id=${clientId}&
+ *      redirect_uri=${redirectUri}&
+ *      code_challenge=${challenge}&
+ *      code_challenge_method=S256&
+ *      scope=email+openid+profile`;
+ *    window.location.href = authUrl;
+ *
+ * 3. In OAuth callback handler (when receiving authorization code):
+ *    const code_verifier = retrievePKCEVerifier();
+ *    // Exchange code + verifier for tokens at /oauth2/token endpoint
+ *    // Include code_verifier in POST body
+ *    clearPKCEVerifier(); // After successful token exchange
+ *
+ * See docs/security/PKCE-IMPLEMENTATION.md for detailed implementation guide.
  */
+
+import { useCallback } from 'react';
 
 /**
  * Get the current authentication token for API requests.
@@ -20,7 +47,7 @@
  * For now, returns a stub token to unblock ProfilePage API integration.
  * The backend config.py currently has stub validation that checks for header presence.
  */
-export function getAuthToken() {
+function getAuthTokenImpl() {
   // TODO [Phase 1]: Replace stub with real token retrieval
   // Real implementation will be:
   // - For Cognito: fetchAuthSession().then(session => session.tokens?.idToken?.toString())
@@ -56,7 +83,7 @@ export function getAuthToken() {
  *
  * TODO [Phase 1]: Implement real auth state check
  */
-export function isAuthenticated() {
+function isAuthenticatedImpl() {
   // TODO [Phase 1]: Check for valid Cognito/Auth0 session
   // Real implementation will check token expiry, refresh if needed
 
@@ -72,6 +99,27 @@ export function isAuthenticated() {
 
   return true; // Stub: assume always authenticated for Phase 1
 }
+
+/**
+ * Hook to get a stable reference to getAuthToken.
+ * Prevents unnecessary re-renders when used in dependency arrays.
+ */
+export function useGetAuthToken() {
+  return useCallback(getAuthTokenImpl, []);
+}
+
+/**
+ * Hook to get a stable reference to isAuthenticated.
+ * Prevents unnecessary re-renders when used in dependency arrays.
+ */
+export function useIsAuthenticated() {
+  return useCallback(isAuthenticatedImpl, []);
+}
+
+// Export the raw functions for backwards compatibility
+// These should only be used outside of React components
+export const getAuthToken = getAuthTokenImpl;
+export const isAuthenticated = isAuthenticatedImpl;
 
 /**
  * Get current authenticated user's email.

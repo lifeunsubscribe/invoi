@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import os
 import base64
@@ -10,6 +11,9 @@ from botocore.exceptions import ClientError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_user, put_invoice
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # S3 client for PDF storage
 s3_client = boto3.client('s3')
@@ -388,11 +392,11 @@ def handler(event, context):
                 error_code = e.response.get('Error', {}).get('Code', 'Unknown')
                 errors.append(f"AWS error processing {json_filename}: {error_code}")
                 failed += 1
-                print(f"AWS error: {error_code} - {str(e)}")
+                logger.error(f"AWS error: {error_code} - {str(e)}")
             except Exception as e:
                 errors.append(f"Error processing {json_filename}: {str(e)}")
                 failed += 1
-                print(f"Unexpected error: {str(e)}")
+                logger.error(f"Unexpected error: {str(e)}")
 
         # Return results
         return {
@@ -407,7 +411,7 @@ def handler(event, context):
         }
 
     except Exception as e:
-        print(f"Unhandled error in import handler: {str(e)}")
+        logger.error(f"Unhandled error in import handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,

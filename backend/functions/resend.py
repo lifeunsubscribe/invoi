@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import os
 from datetime import datetime
@@ -10,6 +11,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_invoice, get_user
 from services.mail_service import send_email
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # S3 client for fetching PDFs
 s3_client = boto3.client('s3')
@@ -106,7 +110,7 @@ def handler(event, context):
         # Get bucket name from environment
         bucket_name = os.environ.get('InvoiStorage') or os.environ.get('SST_Resource_InvoiStorage_name')
         if not bucket_name:
-            print("Error: InvoiStorage bucket name not found in environment")
+            logger.error("InvoiStorage bucket name not found in environment")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -167,7 +171,7 @@ def handler(event, context):
                 except ClientError as e:
                     failed += 1
                     failed_details.append(f'{invoice_id}: Failed to fetch PDF')
-                    print(f"S3 error fetching {pdf_key}: {str(e)}")
+                    logger.error(f"S3 error fetching {pdf_key}: {str(e)}")
                     continue
 
                 # Generate email subject and body
@@ -214,7 +218,7 @@ def handler(event, context):
             except Exception as e:
                 failed += 1
                 failed_details.append(f'{invoice_id}: {str(e)}')
-                print(f"Error resending invoice {invoice_id}: {str(e)}")
+                logger.error(f"Error resending invoice {invoice_id}: {str(e)}")
 
         # Return summary
         return {
@@ -235,7 +239,7 @@ def handler(event, context):
             'body': json.dumps({'error': 'Invalid JSON in request body'})
         }
     except Exception as e:
-        print(f"Unhandled error in resend handler: {str(e)}")
+        logger.error(f"Unhandled error in resend handler: {str(e)}")
         return {
             'statusCode': 500,
             'headers': headers,
