@@ -1,49 +1,66 @@
+/**
+ * Tests for auth module, with focus on production safeguard verification.
+ *
+ * The production safeguard prevents stub authentication from being used in production builds.
+ * Since import.meta.env is read-only in tests, the auth module exports an `env` object
+ * with mockable environment check functions. This allows us to simulate both production
+ * and development environments in tests.
+ */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { getAuthToken, isAuthenticated, getUserEmail } from './auth'
+import { getAuthToken, isAuthenticated, getUserEmail, env } from './auth'
 
 describe('auth module - production safeguards', () => {
-  let originalEnv
-
   beforeEach(() => {
-    // Store original environment
-    originalEnv = { ...import.meta.env }
     // Clear console warnings/errors during tests
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
   afterEach(() => {
-    // Restore console
+    // Restore all mocks and spies
     vi.restoreAllMocks()
   })
 
   describe('getAuthToken', () => {
     it('throws error when called in production mode', () => {
-      // Simulate production environment
-      // Note: import.meta.env is read-only, so we test the behavior indirectly
-      // In actual production build (VITE_BUILD_MODE=production), this will throw
+      // Mock env.isProduction to simulate production environment
+      vi.spyOn(env, 'isProduction').mockReturnValue(true)
 
-      // Since we can't actually modify import.meta.env in tests,
-      // this test documents the expected behavior
-      // The real test happens when running `npm run build`
-
-      // In development mode, it should return stub token
-      const token = getAuthToken()
-      expect(token).toBe('Bearer stub-jwt-token-phase1')
+      // Attempt to get auth token in "production"
+      expect(() => getAuthToken()).toThrow(
+        /PRODUCTION ERROR: Stub authentication is not allowed in production/
+      )
     })
 
     it('returns stub token in development mode', () => {
+      // Mock env.isProduction to simulate development environment
+      vi.spyOn(env, 'isProduction').mockReturnValue(false)
+
       const token = getAuthToken()
       expect(token).toBe('Bearer stub-jwt-token-phase1')
     })
 
     it('logs warning in development mode', () => {
+      // Mock env.isProduction to simulate development environment
+      vi.spyOn(env, 'isProduction').mockReturnValue(false)
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       getAuthToken()
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Using stub authentication token')
+      )
+    })
+
+    it('includes helpful error message pointing to implementation TODOs', () => {
+      // Mock env.isProduction to simulate production environment
+      vi.spyOn(env, 'isProduction').mockReturnValue(true)
+
+      expect(() => getAuthToken()).toThrow(
+        /Real Cognito\/Auth0 integration must be implemented/
+      )
+      expect(() => getAuthToken()).toThrow(
+        /See frontend\/src\/auth\.jsx for implementation TODOs/
       )
     })
   })
