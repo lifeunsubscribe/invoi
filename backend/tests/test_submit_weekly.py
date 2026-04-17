@@ -672,8 +672,8 @@ class TestSubmitWeekly:
 
                         response = handler(event, {})
 
-        # Should return 500 error when transaction is cancelled
-        assert response['statusCode'] == 500
+        # Should return 400 error when transaction is cancelled (client error - duplicate invoice)
+        assert response['statusCode'] == 400
         body = json.loads(response['body'])
         assert 'error' in body
 

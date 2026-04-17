@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 import base64
 import boto3
+from decimal import Decimal
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -276,6 +277,7 @@ def handler(event, context):
         # Update invoice metadata with S3 key
         invoice_metadata['pdfKey'] = s3_key
 
+<<<<<<< Updated upstream
         # Save invoice metadata to DynamoDB
         # Note: The atomic transaction already created the basic record,
         # but we need to update it with the S3 key after upload succeeds.
@@ -310,12 +312,14 @@ def handler(event, context):
             'sent': []  # Initialize sent field - will be populated if email is sent
         }
 
+=======
+>>>>>>> Stashed changes
         # Phase 3: Send email via SES if not save_only mode
         # Email failures are handled gracefully - the invoice is saved successfully
         # even if the email fails, and the user receives a warning instead of an error
+        email_warning = None
         if not save_only:
             email_recipients = []
-            email_warning = None
 
             # Build recipient list (filter out empty emails)
             if client_email:
@@ -338,37 +342,51 @@ def handler(event, context):
                         from_email="noreply@goinvoi.com"
                     )
 
-                    # Persist updated status to DynamoDB first, before updating response
-                    # This ensures the response status matches the database state
-                    try:
-                        invoice_metadata['status'] = 'sent'
-                        invoice_metadata['sentAt'] = datetime.now().isoformat()
-                        invoice_metadata['sentTo'] = email_recipients
-
-                        invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
-                        invoices_table.put_item(Item=invoice_metadata)
-
-                        # Only update response if database update succeeded
-                        response_data['sent'] = email_recipients
-                        response_data['status'] = 'sent'
-                    except ClientError as e:
-                        logger.error(f"Failed to update invoice status after email send: {str(e)}")
-                        # Email was sent but status update failed
-                        # Keep status as 'draft' to match database state
-                        response_data['sent'] = []
-                        response_data['emailWarning'] = f"Email sent to {', '.join(email_recipients)} but status update failed. Invoice remains in draft status."
+                    # Update invoice metadata to reflect successful email send
+                    invoice_metadata['status'] = 'sent'
+                    invoice_metadata['sentAt'] = datetime.now().isoformat()
+                    invoice_metadata['sentTo'] = email_recipients
 
                 except Exception as e:
                     # Email failed but invoice was saved successfully
                     # Return success with warning rather than failing the entire operation
                     logger.error(f"Email send failed: {str(e)}")
                     email_warning = f"Invoice saved but email failed: {str(e)}"
-                    response_data['sent'] = []
-                    response_data['emailWarning'] = email_warning
             else:
                 # No recipients configured
-                response_data['sent'] = []
-                response_data['emailWarning'] = "No email recipients configured"
+                email_warning = "No email recipients configured"
+
+        # Save complete invoice metadata to DynamoDB (single write operation)
+        # This replaces the double-write pattern that occurred when status was updated separately
+        try:
+            invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
+            invoices_table.put_item(Item=invoice_metadata)
+        except ClientError as e:
+            logger.error(f"Failed to save invoice metadata: {str(e)}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Failed to save invoice metadata to database'})
+            }
+
+        # Return success response matching frontend expectations
+        # Frontend expects: {saved: path, sent: [], invoiceNumber, s3Key}
+        # Convert Decimal values to float for JSON serialization
+        response_data = {
+            'saved': s3_key,
+            'invoiceNumber': invoice_number,
+            'invoiceId': invoice_id,
+            's3Key': s3_key,
+            'totalHours': float(invoice_metadata['totalHours']),
+            'totalPay': float(invoice_metadata['totalPay']),
+            'status': invoice_metadata['status'],
+            'createdAt': invoice_metadata['createdAt'],
+            'sent': invoice_metadata.get('sentTo', [])
+        }
+
+        # Add email warning if applicable
+        if email_warning:
+            response_data['emailWarning'] = email_warning
 
         return {
             'statusCode': 200,
@@ -452,6 +470,7 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
     due_date = _calculate_due_date(invoice_date, payment_terms)
 
     # Create invoice metadata
+    # Convert all numeric values to Decimal for DynamoDB compatibility
     invoice_id = week['invNum']
     invoice_metadata = {
         'userId': user_id,
@@ -464,13 +483,13 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
         'weekEnd': week['end'],
         'dueDate': due_date,
         'paymentTerms': payment_terms,
-        'dailyHours': hours,
-        'totalHours': total_hours,
-        'rate': rate,
-        'subtotal': subtotal,
-        'taxRate': tax_rate,
-        'taxAmount': tax_amount,
-        'totalPay': total_pay,
+        'dailyHours': {day: Decimal(str(h)) for day, h in hours.items()},
+        'totalHours': Decimal(str(total_hours)),
+        'rate': Decimal(str(rate)),
+        'subtotal': Decimal(str(subtotal)),
+        'taxRate': Decimal(str(tax_rate)),
+        'taxAmount': Decimal(str(tax_amount)),
+        'totalPay': Decimal(str(total_pay)),
         'template': user_config.get('template', 'morning-light'),
         'sentAt': None,  # Will be set in Phase 3 when email is sent
         'sentTo': [],

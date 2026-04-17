@@ -64,15 +64,18 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
             'SST_Resource_InvoiStorage_name': 'test-bucket'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
-                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                    with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
-                        with patch('functions.submit_monthly.save_pdf_to_s3'):
-                            with patch('functions.submit_monthly.put_invoice') as mock_put_invoice:
-                                with patch('functions.submit_monthly.send_monthly_email') as mock_send_email:
-                                    response = handler(event, {})
+                with patch('functions.submit_monthly.get_invoice', return_value=None):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
+                            with patch('functions.submit_monthly.save_pdf_to_s3'):
+                                with patch('functions.submit_monthly.put_invoice') as mock_put_invoice:
+                                    with patch('functions.submit_monthly.send_monthly_email') as mock_send_email:
+                                        response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -86,8 +89,8 @@ class TestSubmitMonthly:
         assert call_args[1]['to_addresses'] == ['accountant@example.com']
         assert call_args[1]['user_name'] == 'Test User'
 
-        # Verify put_invoice called twice (initial save + status update after send)
-        assert mock_put_invoice.call_count == 2
+        # Verify put_invoice called once (single consolidated write after email attempt)
+        assert mock_put_invoice.call_count == 1
 
     def test_submit_monthly_without_send(self):
         """POST with send=False should save as draft without sending email"""
@@ -132,15 +135,18 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
             'SST_Resource_InvoiStorage_name': 'test-bucket'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
-                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                    with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
-                        with patch('functions.submit_monthly.save_pdf_to_s3'):
-                            with patch('functions.submit_monthly.put_invoice') as mock_put_invoice:
-                                with patch('functions.submit_monthly.send_monthly_email') as mock_send_email:
-                                    response = handler(event, {})
+                with patch('functions.submit_monthly.get_invoice', return_value=None):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
+                            with patch('functions.submit_monthly.save_pdf_to_s3'):
+                                with patch('functions.submit_monthly.put_invoice') as mock_put_invoice:
+                                    with patch('functions.submit_monthly.send_monthly_email') as mock_send_email:
+                                        response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -206,9 +212,15 @@ class TestSubmitMonthly:
         # Mock empty weekly invoices
         mock_weekly_invoices = []
 
-        with patch('functions.submit_monthly.get_user', return_value=mock_user):
-            with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                response = handler(event, {})
+        with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_monthly.get_user', return_value=mock_user):
+                with patch('functions.submit_monthly.get_invoice', return_value=None):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                        response = handler(event, {})
 
         assert response['statusCode'] == 400
         body = json.loads(response['body'])
@@ -257,15 +269,18 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
             'SST_Resource_InvoiStorage_name': 'test-bucket'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
-                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                    with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
-                        with patch('functions.submit_monthly.save_pdf_to_s3'):
-                            with patch('functions.submit_monthly.put_invoice'):
-                                with patch('functions.submit_monthly.send_monthly_email', side_effect=Exception('SES error')):
-                                    response = handler(event, {})
+                with patch('functions.submit_monthly.get_invoice', return_value=None):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
+                            with patch('functions.submit_monthly.save_pdf_to_s3'):
+                                with patch('functions.submit_monthly.put_invoice'):
+                                    with patch('functions.submit_monthly.send_monthly_email', side_effect=Exception('SES error')):
+                                        response = handler(event, {})
 
         # Should return 200 with warning, not error
         assert response['statusCode'] == 200
@@ -403,6 +418,8 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
             'SST_Resource_InvoiStorage_name': 'test-bucket'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
@@ -475,14 +492,17 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
             'SST_Resource_InvoiStorage_name': 'test-bucket'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
-                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                    with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
-                        with patch('functions.submit_monthly.save_pdf_to_s3'):
-                            with patch('functions.submit_monthly.put_invoice'):
-                                response = handler(event, {})
+                with patch('functions.submit_monthly.get_invoice', return_value=None):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
+                            with patch('functions.submit_monthly.save_pdf_to_s3'):
+                                with patch('functions.submit_monthly.put_invoice'):
+                                    response = handler(event, {})
 
         assert response['statusCode'] == 200
         # Lambda should NOT set CORS headers - API Gateway handles them

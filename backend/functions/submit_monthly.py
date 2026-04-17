@@ -6,6 +6,7 @@ from datetime import datetime
 import calendar
 import base64
 import boto3
+from decimal import Decimal
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -155,6 +156,7 @@ def handler(event, context):
             if has_complete_data:
                 # Report already exists with complete data - return existing data (idempotent behavior)
                 logger.info(f"Report {report_id} already exists for user {user_id}. Returning existing report.")
+                # Convert Decimal values to float for JSON serialization
                 return {
                     'statusCode': 200,
                     'headers': headers,
@@ -162,8 +164,8 @@ def handler(event, context):
                         'reportId': existing_report.get('invoiceId'),
                         's3Key': existing_report.get('pdfKey'),
                         'monthLabel': existing_report.get('monthLabel'),
-                        'totalHours': existing_report.get('totalHours'),
-                        'totalPay': existing_report.get('totalPay'),
+                        'totalHours': float(existing_report.get('totalHours')),
+                        'totalPay': float(existing_report.get('totalPay')),
                         'weekCount': existing_report.get('weekCount'),
                         'status': existing_report.get('status'),
                         'createdAt': existing_report.get('createdAt'),
@@ -276,7 +278,7 @@ def handler(event, context):
 
         total_pay = total_hours * rate
 
-        # Save report metadata to Invoices table with type="monthly"
+        # Prepare report metadata for Invoices table with type="monthly"
         report_metadata = {
             'userId': user_id,
             'invoiceId': report_id,
@@ -286,35 +288,21 @@ def handler(event, context):
             'month': month_int,
             'monthLabel': month_label,
             'weekCount': len(week_data),
-            'totalHours': total_hours,
-            'rate': rate,
-            'totalPay': total_pay,
+            'totalHours': Decimal(str(total_hours)),
+            'rate': Decimal(str(rate)),
+            'totalPay': Decimal(str(total_pay)),
             'pdfKey': s3_key,
             'sentAt': None,
             'sentTo': [],
             'createdAt': datetime.now().isoformat()
         }
 
-        put_invoice(report_metadata)
-
-        # Prepare response data
-        response_data = {
-            'reportId': report_id,
-            's3Key': s3_key,
-            'monthLabel': month_label,
-            'totalHours': total_hours,
-            'totalPay': total_pay,
-            'weekCount': len(week_data),
-            'status': report_metadata['status'],
-            'createdAt': report_metadata['createdAt']
-        }
-
         # Phase 3: Send email via SES if send=True
         # Email failures are handled gracefully - the report is saved successfully
         # even if the email fails, and the user receives a warning instead of an error
+        email_warning = None
         if send:
             email_recipients = []
-            email_warning = None
 
             # Build recipient list (only accountant for monthly reports)
             if accountant_email:
@@ -334,31 +322,41 @@ def handler(event, context):
                         from_email="noreply@goinvoi.com"
                     )
 
-                    # Update report status to 'sent' and record email metadata
+                    # Update report metadata to reflect successful email send
                     report_metadata['status'] = 'sent'
                     report_metadata['sentAt'] = datetime.now().isoformat()
                     report_metadata['sentTo'] = email_recipients
 
-                    # Persist updated status to DynamoDB
-                    put_invoice(report_metadata)
-
-                    response_data['sent'] = email_recipients
-                    response_data['status'] = 'sent'
-
                 except Exception as e:
-                    # Email failed but report was saved successfully
+                    # Email failed but report will be saved successfully
                     # Return success with warning rather than failing the entire operation
                     logger.error(f"Email send failed: {str(e)}")
                     email_warning = f"Report saved but email failed: {str(e)}"
-                    response_data['sent'] = []
-                    response_data['emailWarning'] = email_warning
             else:
                 # No recipients configured
-                response_data['sent'] = []
-                response_data['emailWarning'] = "No email recipient configured"
-        else:
-            # Send=False, just save as draft
-            response_data['sent'] = []
+                email_warning = "No email recipient configured"
+
+        # Save complete report metadata to DynamoDB (single write operation)
+        # This replaces the double-write pattern that occurred when status was updated separately
+        put_invoice(report_metadata)
+
+        # Prepare response data
+        # Convert Decimal values to float for JSON serialization
+        response_data = {
+            'reportId': report_id,
+            's3Key': s3_key,
+            'monthLabel': month_label,
+            'totalHours': float(total_hours),
+            'totalPay': float(total_pay),
+            'weekCount': len(week_data),
+            'status': report_metadata['status'],
+            'createdAt': report_metadata['createdAt'],
+            'sent': report_metadata.get('sentTo', [])
+        }
+
+        # Add email warning if applicable
+        if email_warning:
+            response_data['emailWarning'] = email_warning
 
         # Return report metadata including S3 key
         return {
