@@ -954,3 +954,105 @@ class TestSubmitWeekly:
         body = json.loads(response['body'])
         assert 'error' in body
         assert 'hours' in body['error'].lower() or 'default shift' in body['error'].lower()
+
+    def test_submit_weekly_metadata_update_failure(self):
+        """POST should return 500 if metadata update fails after S3 upload succeeds"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'hours': {
+                    'Monday': 8,
+                    'Tuesday': 8,
+                    'Wednesday': 8,
+                    'Thursday': 8,
+                    'Friday': 8,
+                    'Saturday': 0,
+                    'Sunday': 0
+                },
+                'week': {
+                    'start': '2026-03-24',
+                    'end': '2026-03-30',
+                    'invNum': 'INV-20260324'
+                },
+                'saveOnly': True
+            })
+        }
+
+        # Mock user config
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'address': '123 Main St',
+            'personalEmail': 'test@example.com',
+            'rate': 28.00,
+            'template': 'morning-light',
+            'signatureFont': 'Dancing Script',
+            'paymentTerms': 'receipt',
+            'taxEnabled': False,
+            'invoiceNumberConfig': {
+                'prefix': 'INV',
+                'includeYear': False,
+                'separator': '-',
+                'padding': 3,
+                'nextNum': 1
+            },
+            'activeClientId': 'client-1',
+            'clients': [
+                {
+                    'id': 'client-1',
+                    'name': 'Test Client',
+                    'email': 'client@example.com'
+                }
+            ]
+        }
+
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        # Mock metadata update failure
+        metadata_error = ClientError(
+            {
+                'Error': {
+                    'Code': 'ProvisionedThroughputExceededException',
+                    'Message': 'Request rate too high'
+                }
+            },
+            'PutItem'
+        )
+
+        with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_weekly.get_user', return_value=mock_user):
+                with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
+                    with patch('functions.submit_weekly.save_pdf_to_s3'):
+                        with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                            with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                # Mock DynamoDB client for TransactWriteItems (succeeds)
+                                mock_dynamodb_client = MagicMock()
+                                mock_boto_client.return_value = mock_dynamodb_client
+
+                                # Mock DynamoDB resource for put_item (fails with metadata update error)
+                                mock_table = MagicMock()
+                                mock_table.put_item.side_effect = metadata_error
+                                mock_boto_resource.return_value.Table.return_value = mock_table
+
+                                response = handler(event, {})
+
+        # Should return 500 error when metadata update fails
+        assert response['statusCode'] == 500
+        body = json.loads(response['body'])
+        assert 'error' in body
+        assert 'metadata' in body['error'].lower()
+        # Should include helpful context about what failed
+        assert 'details' in body
+        assert 'PDF link' in body['details'] or 'pdfKey' in body.get('details', '')
