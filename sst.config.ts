@@ -106,9 +106,10 @@ export default $config({
       } : undefined,
       cors: {
         // Allow requests from custom domain in production, localhost in dev
+        // Security: Explicit origins prevent CSRF attacks and credential exposure
         allowOrigins: $app.stage === "production"
           ? ["https://goinvoi.com", "https://www.goinvoi.com"]
-          : ["*"],
+          : ["http://localhost:5173"],
         allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowHeaders: ["Content-Type", "Authorization"],
       },
