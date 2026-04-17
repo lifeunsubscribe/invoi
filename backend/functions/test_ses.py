@@ -54,7 +54,6 @@ def handler(event, context):
             'statusCode': 401,
             'headers': {
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
             },
             'body': json.dumps({'error': 'Authentication required. Provide X-Test-Secret header.'})
         }
@@ -68,7 +67,6 @@ def handler(event, context):
             'statusCode': 400,
             'headers': {
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
             },
             'body': json.dumps({'error': "Missing 'to' parameter"})
         }
@@ -103,7 +101,6 @@ Invoi Team"""
             'statusCode': 200,
             'headers': {
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
             },
             'body': json.dumps({
                 'message': 'Test email sent successfully',
@@ -120,7 +117,6 @@ Invoi Team"""
             'statusCode': 500,
             'headers': {
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
             },
             'body': json.dumps({
                 'error': f'Failed to send email: {error_code} - {error_message}'
@@ -132,7 +128,6 @@ Invoi Team"""
             'statusCode': 500,
             'headers': {
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
             },
             'body': json.dumps({
                 'error': f'Unexpected error: {str(e)}'
