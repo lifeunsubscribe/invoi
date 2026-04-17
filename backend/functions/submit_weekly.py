@@ -278,14 +278,23 @@ def handler(event, context):
 
         # Save invoice metadata to DynamoDB
         # Note: The atomic transaction already created the basic record,
-        # but we need to update it with the S3 key after upload succeeds
+        # but we need to update it with the S3 key after upload succeeds.
+        # This update is critical - if it fails, the invoice record will be incomplete
+        # and users won't be able to retrieve the PDF. We propagate the error rather
+        # than silently continuing with an inconsistent state.
         try:
             invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
             invoices_table.put_item(Item=invoice_metadata)
         except ClientError as e:
-            logger.error(f"Failed to update invoice metadata: {str(e)}")
-            # PDF is already saved, so this is not a critical failure
-            # Log and continue
+            logger.error(f"Failed to update invoice metadata with pdfKey: {str(e)}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({
+                    'error': 'Failed to save invoice metadata. Please try again or contact support.',
+                    'details': 'Invoice was created but PDF link could not be saved'
+                })
+            }
 
         # Return success response matching frontend expectations
         # Frontend expects: {saved: path, sent: [], invoiceNumber, s3Key}
