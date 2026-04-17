@@ -87,12 +87,9 @@ class TestSubmitWeekly:
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
-                        with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                        # Mock _increment_invoice_counter to return the next counter value
+                        with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
                             with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
-                                # Mock DynamoDB client for TransactWriteItems
-                                mock_dynamodb_client = MagicMock()
-                                mock_boto_client.return_value = mock_dynamodb_client
-
                                 # Mock DynamoDB resource for put_item
                                 mock_table = MagicMock()
                                 mock_boto_resource.return_value.Table.return_value = mock_table
@@ -334,10 +331,8 @@ class TestSubmitWeekly:
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
-                        with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                        with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
                             with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
-                                mock_dynamodb_client = MagicMock()
-                                mock_boto_client.return_value = mock_dynamodb_client
                                 mock_table = MagicMock()
                                 mock_boto_resource.return_value.Table.return_value = mock_table
 
@@ -422,12 +417,9 @@ class TestSubmitWeekly:
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
-                        with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                        # Mock _increment_invoice_counter to return the next counter value
+                        with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
                             with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
-                                # Mock DynamoDB client for TransactWriteItems
-                                mock_dynamodb_client = MagicMock()
-                                mock_boto_client.return_value = mock_dynamodb_client
-
                                 # Mock DynamoDB resource for put_item
                                 mock_table = MagicMock()
                                 mock_boto_resource.return_value.Table.return_value = mock_table
@@ -579,8 +571,8 @@ class TestSubmitWeekly:
         assert call_args[1]['to_addresses'] == ['client@example.com', 'accountant@example.com']
         assert call_args[1]['user_name'] == 'Test User'
 
-    def test_submit_weekly_transaction_cancelled(self):
-        """POST should handle TransactionCanceledException gracefully"""
+    def test_submit_weekly_duplicate_invoice(self):
+        """POST should handle duplicate invoice ID gracefully"""
         event = {
             'requestContext': {
                 'http': {'method': 'POST'},
@@ -643,18 +635,15 @@ class TestSubmitWeekly:
         # Mock PDF generation returning bytes
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
-        # Mock TransactionCanceledException
-        transaction_error = ClientError(
+        # Mock ConditionalCheckFailedException (invoice ID already exists)
+        duplicate_error = ClientError(
             {
                 'Error': {
-                    'Code': 'TransactionCanceledException',
-                    'Message': 'Transaction cancelled'
-                },
-                'CancellationReasons': [
-                    {'Code': 'ConditionalCheckFailed', 'Message': 'Invoice already exists'}
-                ]
+                    'Code': 'ConditionalCheckFailedException',
+                    'Message': 'The conditional request failed'
+                }
             },
-            'TransactWriteItems'
+            'PutItem'
         )
 
         with patch.dict(os.environ, {
@@ -664,18 +653,20 @@ class TestSubmitWeekly:
         }):
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
-                    with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                        # Mock DynamoDB client to raise TransactionCanceledException
-                        mock_dynamodb_client = MagicMock()
-                        mock_dynamodb_client.transact_write_items.side_effect = transaction_error
-                        mock_boto_client.return_value = mock_dynamodb_client
+                    with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
+                        with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                            # Mock DynamoDB resource to raise ConditionalCheckFailedException on put_item
+                            mock_table = MagicMock()
+                            mock_table.put_item.side_effect = duplicate_error
+                            mock_boto_resource.return_value.Table.return_value = mock_table
 
-                        response = handler(event, {})
+                            response = handler(event, {})
 
-        # Should return 500 error when transaction is cancelled
-        assert response['statusCode'] == 500
+        # Should return 400 error when invoice already exists (client sent duplicate)
+        assert response['statusCode'] == 400
         body = json.loads(response['body'])
         assert 'error' in body
+        assert 'already exists' in body['error'].lower()
 
     def test_submit_weekly_email_failure_returns_warning(self):
         """POST with email failure should return success with warning"""
