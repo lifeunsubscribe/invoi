@@ -5,11 +5,12 @@ import os
 from datetime import datetime
 import base64
 import boto3
+from decimal import Decimal
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from services.db_service import get_user
+from services.db_service import get_user, put_invoice
 from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
 from services.mail_service import send_weekly_email
 from services.logging_config import setup_logging
@@ -277,6 +278,7 @@ def handler(event, context):
         invoice_metadata['pdfKey'] = s3_key
 
         # Save invoice metadata to DynamoDB
+<<<<<<< Updated upstream
         # Note: The atomic transaction already created the basic record,
         # but we need to update it with the S3 key after upload succeeds.
         # This update is critical - if it fails, the invoice record will be incomplete
@@ -294,17 +296,42 @@ def handler(event, context):
                     'error': 'Failed to save invoice metadata. Please try again or contact support.',
                     'details': 'Invoice was created but PDF link could not be saved'
                 })
+=======
+        # CRITICAL: If metadata save fails, we must delete the orphaned PDF from S3
+        # to prevent storage leaks and maintain data consistency
+        try:
+            put_invoice(invoice_metadata)
+        except Exception as e:
+            # Metadata save failed - rollback by deleting the uploaded PDF from S3
+            logger.error(f"Failed to save invoice metadata: {str(e)}")
+            logger.warning(f"Rolling back S3 upload by deleting {s3_key}")
+
+            try:
+                s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
+                logger.info(f"Successfully deleted orphaned PDF from S3: {s3_key}")
+            except Exception as s3_error:
+                # S3 cleanup also failed - log both errors
+                logger.error(f"CRITICAL: Failed to delete orphaned PDF from S3: {s3_key} - {str(s3_error)}")
+                logger.error(f"Manual cleanup required: bucket={bucket_name} key={s3_key}")
+
+            # Return error to user - the invoice was NOT saved
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Failed to save invoice metadata to database'})
+>>>>>>> Stashed changes
             }
 
         # Return success response matching frontend expectations
         # Frontend expects: {saved: path, sent: [], invoiceNumber, s3Key}
+        # Convert Decimal values back to float for JSON serialization
         response_data = {
             'saved': s3_key,
             'invoiceNumber': invoice_number,
             'invoiceId': invoice_id,
             's3Key': s3_key,
-            'totalHours': invoice_metadata['totalHours'],
-            'totalPay': invoice_metadata['totalPay'],
+            'totalHours': float(invoice_metadata['totalHours']),
+            'totalPay': float(invoice_metadata['totalPay']),
             'status': invoice_metadata['status'],
             'createdAt': invoice_metadata['createdAt'],
             'sent': []  # Initialize sent field - will be populated if email is sent
@@ -331,8 +358,8 @@ def handler(event, context):
                         user_name=user_config.get('name', 'Contractor'),
                         week_start=week['start'],
                         week_end=week['end'],
-                        total_hours=invoice_metadata['totalHours'],
-                        total_pay=invoice_metadata['totalPay'],
+                        total_hours=float(invoice_metadata['totalHours']),
+                        total_pay=float(invoice_metadata['totalPay']),
                         pdf_data=pdf_bytes,
                         pdf_filename=f"{invoice_id}.pdf",
                         from_email="noreply@goinvoi.com"
@@ -430,7 +457,7 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
     # Use the pre-generated invoice number passed from caller
     # This avoids regenerating the number which would cause gaps if the transaction fails
 
-    # Calculate totals
+    # Calculate totals (using Decimal for DynamoDB compatibility)
     total_hours = sum(float(hours.get(day, 0)) for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
 
     rate = float(user_config.get('rate', 0))
@@ -438,7 +465,7 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
 
     # Calculate tax if enabled
     tax_enabled = user_config.get('taxEnabled', False)
-    tax_rate = user_config.get('taxRate', 0)
+    tax_rate = float(user_config.get('taxRate', 0))
     tax_amount = 0
 
     if tax_enabled:
@@ -451,7 +478,10 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
     invoice_date = datetime.now()
     due_date = _calculate_due_date(invoice_date, payment_terms)
 
-    # Create invoice metadata
+    # Convert daily hours to Decimal for DynamoDB
+    daily_hours_decimal = {day: Decimal(str(val)) for day, val in hours.items()}
+
+    # Create invoice metadata (convert numeric values to Decimal for DynamoDB)
     invoice_id = week['invNum']
     invoice_metadata = {
         'userId': user_id,
@@ -464,13 +494,13 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
         'weekEnd': week['end'],
         'dueDate': due_date,
         'paymentTerms': payment_terms,
-        'dailyHours': hours,
-        'totalHours': total_hours,
-        'rate': rate,
-        'subtotal': subtotal,
-        'taxRate': tax_rate,
-        'taxAmount': tax_amount,
-        'totalPay': total_pay,
+        'dailyHours': daily_hours_decimal,
+        'totalHours': Decimal(str(total_hours)),
+        'rate': Decimal(str(rate)),
+        'subtotal': Decimal(str(subtotal)),
+        'taxRate': Decimal(str(tax_rate)),
+        'taxAmount': Decimal(str(tax_amount)),
+        'totalPay': Decimal(str(total_pay)),
         'template': user_config.get('template', 'morning-light'),
         'sentAt': None,  # Will be set in Phase 3 when email is sent
         'sentTo': [],
@@ -517,7 +547,8 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
             # Transaction failed - likely duplicate invoiceId or user not found
             cancellation_reasons = e.response.get('CancellationReasons', [])
             logger.error(f"Transaction cancelled: {cancellation_reasons}")
-            raise ValueError('Invoice already exists or user configuration error')
+            # Re-raise ClientError to be caught by ClientError handler (500)
+            raise
         raise
 
     return invoice_number, invoice_metadata
