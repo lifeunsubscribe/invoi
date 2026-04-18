@@ -3,6 +3,7 @@ import logging
 import sys
 import os
 from datetime import datetime
+from decimal import Decimal
 import base64
 import boto3
 
@@ -13,6 +14,8 @@ from services.db_service import get_user
 from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
 from services.mail_service import send_weekly_email
 from services.logging_config import setup_logging
+from services.auth_utils import extract_user_id_from_token
+from services.s3_utils import fetch_logo_from_s3
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
@@ -69,7 +72,7 @@ def handler(event, context):
                 'body': json.dumps({'error': 'Missing Authorization header'})
             }
 
-        user_id = _extract_user_id_from_token(event)
+        user_id = extract_user_id_from_token(event)
 
         if not user_id:
             return {
@@ -210,7 +213,7 @@ def handler(event, context):
         logo_key = user_config.get('logoKey')
         if logo_key:
             try:
-                logo_data = _fetch_logo_from_s3(logo_key)
+                logo_data = fetch_logo_from_s3(s3_client, BUCKET_NAME, logo_key)
             except Exception as e:
                 # Log error but don't fail - invoice can be generated without logo
                 logger.warning(f"Failed to fetch logo from S3: {str(e)}")
@@ -298,13 +301,14 @@ def handler(event, context):
 
         # Return success response matching frontend expectations
         # Frontend expects: {saved: path, sent: [], invoiceNumber, s3Key}
+        # Convert Decimal to float for JSON serialization
         response_data = {
             'saved': s3_key,
             'invoiceNumber': invoice_number,
             'invoiceId': invoice_id,
             's3Key': s3_key,
-            'totalHours': invoice_metadata['totalHours'],
-            'totalPay': invoice_metadata['totalPay'],
+            'totalHours': float(invoice_metadata['totalHours']),
+            'totalPay': float(invoice_metadata['totalPay']),
             'status': invoice_metadata['status'],
             'createdAt': invoice_metadata['createdAt'],
             'sent': []  # Initialize sent field - will be populated if email is sent
@@ -326,13 +330,14 @@ def handler(event, context):
             if email_recipients:
                 try:
                     # Send invoice email with PDF attachment
+                    # Convert Decimal to float for email service
                     send_weekly_email(
                         to_addresses=email_recipients,
                         user_name=user_config.get('name', 'Contractor'),
                         week_start=week['start'],
                         week_end=week['end'],
-                        total_hours=invoice_metadata['totalHours'],
-                        total_pay=invoice_metadata['totalPay'],
+                        total_hours=float(invoice_metadata['totalHours']),
+                        total_pay=float(invoice_metadata['totalPay']),
                         pdf_data=pdf_bytes,
                         pdf_filename=f"{invoice_id}.pdf",
                         from_email="noreply@goinvoi.com"
@@ -431,6 +436,7 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
     # This avoids regenerating the number which would cause gaps if the transaction fails
 
     # Calculate totals
+    # Note: DynamoDB requires Decimal type for numeric values, not float
     total_hours = sum(float(hours.get(day, 0)) for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
 
     rate = float(user_config.get('rate', 0))
@@ -438,11 +444,11 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
 
     # Calculate tax if enabled
     tax_enabled = user_config.get('taxEnabled', False)
-    tax_rate = user_config.get('taxRate', 0)
-    tax_amount = 0
+    tax_rate = float(user_config.get('taxRate', 0))
+    tax_amount = 0.0
 
     if tax_enabled:
-        tax_amount = subtotal * (tax_rate / 100)
+        tax_amount = subtotal * (tax_rate / 100.0)
 
     total_pay = subtotal + tax_amount
 
@@ -452,6 +458,7 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
     due_date = _calculate_due_date(invoice_date, payment_terms)
 
     # Create invoice metadata
+    # Convert numeric values to Decimal for DynamoDB compatibility
     invoice_id = week['invNum']
     invoice_metadata = {
         'userId': user_id,
@@ -465,12 +472,12 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
         'dueDate': due_date,
         'paymentTerms': payment_terms,
         'dailyHours': hours,
-        'totalHours': total_hours,
-        'rate': rate,
-        'subtotal': subtotal,
-        'taxRate': tax_rate,
-        'taxAmount': tax_amount,
-        'totalPay': total_pay,
+        'totalHours': Decimal(str(total_hours)),
+        'rate': Decimal(str(rate)),
+        'subtotal': Decimal(str(subtotal)),
+        'taxRate': Decimal(str(tax_rate)),
+        'taxAmount': Decimal(str(tax_amount)),
+        'totalPay': Decimal(str(total_pay)),
         'template': user_config.get('template', 'morning-light'),
         'sentAt': None,  # Will be set in Phase 3 when email is sent
         'sentTo': [],
@@ -596,58 +603,3 @@ def _populate_hours_from_default_shift(default_shift):
     return hours
 
 
-def _extract_user_id_from_token(event):
-    """
-    Extract userId from JWT token claims.
-
-    Returns None if no valid JWT claims are present.
-    """
-    # Check for Cognito authorizer claims (API Gateway v2 with JWT authorizer)
-    try:
-        claims = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {})
-        if claims and 'sub' in claims:
-            return claims.get('sub')
-    except (KeyError, AttributeError):
-        pass
-
-    # Fallback: check for lambda authorizer format (API Gateway v1)
-    try:
-        authorizer = event.get('requestContext', {}).get('authorizer', {})
-        if authorizer and 'claims' in authorizer and 'sub' in authorizer['claims']:
-            return authorizer['claims'].get('sub')
-    except (KeyError, AttributeError):
-        pass
-
-    return None
-
-
-def _fetch_logo_from_s3(logo_key):
-    """
-    Fetch logo image from S3 and return as base64-encoded data URL.
-
-    Args:
-        logo_key: str - S3 key for logo (e.g., users/{userId}/logo.png)
-
-    Returns:
-        str - Base64-encoded data URL (e.g., data:image/png;base64,...)
-        None - If logo cannot be fetched
-
-    Raises:
-        ClientError - If S3 operation fails
-    """
-    try:
-        # Fetch logo from S3
-        response = s3_client.get_object(Bucket=BUCKET_NAME, Key=logo_key)
-        logo_bytes = response['Body'].read()
-        content_type = response.get('ContentType', 'application/octet-stream')
-
-        # Encode as base64 data URL
-        base64_data = base64.b64encode(logo_bytes).decode('utf-8')
-        data_url = f"data:{content_type};base64,{base64_data}"
-
-        return data_url
-
-    except ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-        logger.warning(f"Failed to fetch logo from S3 (key: {logo_key}): {error_code}")
-        raise

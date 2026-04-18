@@ -346,7 +346,8 @@ class TestValidation:
     def test_validate_email_too_long(self):
         """Validation should fail when email exceeds 254 characters"""
         # Create email with 255 characters
-        local_part = 'a' * 240
+        # '@example.com' is 12 chars, so need 243 chars to get 255 total
+        local_part = 'a' * 243
         email = f'{local_part}@example.com'  # 255 total chars
         data = {
             'name': 'Test User',
@@ -360,7 +361,8 @@ class TestValidation:
     def test_validate_email_at_max_length(self):
         """Validation should pass when email is exactly 254 characters"""
         # Create email with 254 characters
-        local_part = 'a' * 239
+        # '@example.com' is 12 chars, so need 242 chars to get 254 total
+        local_part = 'a' * 242
         email = f'{local_part}@example.com'  # 254 total chars
         data = {
             'name': 'Test User',

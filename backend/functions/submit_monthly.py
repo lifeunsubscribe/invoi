@@ -3,6 +3,7 @@ import logging
 import sys
 import os
 from datetime import datetime
+from decimal import Decimal
 import calendar
 import base64
 import boto3
@@ -14,6 +15,8 @@ from services.db_service import query_invoices, get_user, put_invoice, get_invoi
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from services.logging_config import setup_logging
+from services.auth_utils import extract_user_id_from_token
+from services.s3_utils import fetch_logo_from_s3
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
@@ -66,7 +69,7 @@ def handler(event, context):
                 'body': json.dumps({'error': 'Missing Authorization header'})
             }
 
-        user_id = _extract_user_id_from_token(event)
+        user_id = extract_user_id_from_token(event)
 
         if not user_id:
             return {
@@ -155,6 +158,7 @@ def handler(event, context):
             if has_complete_data:
                 # Report already exists with complete data - return existing data (idempotent behavior)
                 logger.info(f"Report {report_id} already exists for user {user_id}. Returning existing report.")
+                # Convert Decimal to float for JSON serialization
                 return {
                     'statusCode': 200,
                     'headers': headers,
@@ -162,8 +166,8 @@ def handler(event, context):
                         'reportId': existing_report.get('invoiceId'),
                         's3Key': existing_report.get('pdfKey'),
                         'monthLabel': existing_report.get('monthLabel'),
-                        'totalHours': existing_report.get('totalHours'),
-                        'totalPay': existing_report.get('totalPay'),
+                        'totalHours': float(existing_report.get('totalHours')) if existing_report.get('totalHours') is not None else 0,
+                        'totalPay': float(existing_report.get('totalPay')) if existing_report.get('totalPay') is not None else 0,
                         'weekCount': existing_report.get('weekCount'),
                         'status': existing_report.get('status'),
                         'createdAt': existing_report.get('createdAt'),
@@ -221,7 +225,7 @@ def handler(event, context):
         logo_key = user_config.get('logoKey')
         if logo_key:
             try:
-                logo_data = _fetch_logo_from_s3(logo_key)
+                logo_data = fetch_logo_from_s3(s3_client, BUCKET_NAME, logo_key)
             except Exception as e:
                 # Log error but don't fail - report can be generated without logo
                 logger.warning(f"Failed to fetch logo from S3: {str(e)}")
@@ -277,6 +281,7 @@ def handler(event, context):
         total_pay = total_hours * rate
 
         # Save report metadata to Invoices table with type="monthly"
+        # Convert numeric values to Decimal for DynamoDB compatibility
         report_metadata = {
             'userId': user_id,
             'invoiceId': report_id,
@@ -286,9 +291,9 @@ def handler(event, context):
             'month': month_int,
             'monthLabel': month_label,
             'weekCount': len(week_data),
-            'totalHours': total_hours,
-            'rate': rate,
-            'totalPay': total_pay,
+            'totalHours': Decimal(str(total_hours)),
+            'rate': Decimal(str(rate)),
+            'totalPay': Decimal(str(total_pay)),
             'pdfKey': s3_key,
             'sentAt': None,
             'sentTo': [],
@@ -298,12 +303,13 @@ def handler(event, context):
         put_invoice(report_metadata)
 
         # Prepare response data
+        # Convert Decimal to float for JSON serialization
         response_data = {
             'reportId': report_id,
             's3Key': s3_key,
             'monthLabel': month_label,
-            'totalHours': total_hours,
-            'totalPay': total_pay,
+            'totalHours': float(report_metadata['totalHours']),
+            'totalPay': float(report_metadata['totalPay']),
             'weekCount': len(week_data),
             'status': report_metadata['status'],
             'createdAt': report_metadata['createdAt']
@@ -323,12 +329,13 @@ def handler(event, context):
             if email_recipients:
                 try:
                     # Send monthly report email with PDF attachment
+                    # Convert Decimal to float for email service
                     send_monthly_email(
                         to_addresses=email_recipients,
                         user_name=user_config.get('name', 'Contractor'),
                         month_label=month_label,
-                        total_hours=total_hours,
-                        total_pay=total_pay,
+                        total_hours=float(report_metadata['totalHours']),
+                        total_pay=float(report_metadata['totalPay']),
                         pdf_data=pdf_bytes,
                         pdf_filename=f"{report_id}.pdf",
                         from_email="noreply@goinvoi.com"
@@ -389,58 +396,3 @@ def handler(event, context):
         }
 
 
-def _extract_user_id_from_token(event):
-    """
-    Extract userId from JWT token claims.
-
-    Returns None if no valid JWT claims are present.
-    """
-    # Check for Cognito authorizer claims (API Gateway v2 with JWT authorizer)
-    try:
-        claims = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {})
-        if claims and 'sub' in claims:
-            return claims.get('sub')
-    except (KeyError, AttributeError):
-        pass
-
-    # Fallback: check for lambda authorizer format (API Gateway v1)
-    try:
-        authorizer = event.get('requestContext', {}).get('authorizer', {})
-        if authorizer and 'claims' in authorizer and 'sub' in authorizer['claims']:
-            return authorizer['claims'].get('sub')
-    except (KeyError, AttributeError):
-        pass
-
-    return None
-
-
-def _fetch_logo_from_s3(logo_key):
-    """
-    Fetch logo image from S3 and return as base64-encoded data URL.
-
-    Args:
-        logo_key: str - S3 key for logo (e.g., users/{userId}/logo.png)
-
-    Returns:
-        str - Base64-encoded data URL (e.g., data:image/png;base64,...)
-        None - If logo cannot be fetched
-
-    Raises:
-        ClientError - If S3 operation fails
-    """
-    try:
-        # Fetch logo from S3
-        response = s3_client.get_object(Bucket=BUCKET_NAME, Key=logo_key)
-        logo_bytes = response['Body'].read()
-        content_type = response.get('ContentType', 'application/octet-stream')
-
-        # Encode as base64 data URL
-        base64_data = base64.b64encode(logo_bytes).decode('utf-8')
-        data_url = f"data:{content_type};base64,{base64_data}"
-
-        return data_url
-
-    except ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-        logger.warning(f"Failed to fetch logo from S3 (key: {logo_key}): {error_code}")
-        raise
