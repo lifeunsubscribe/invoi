@@ -367,7 +367,6 @@ def handler(event, context):
                         report_metadata['sentAt'] = datetime.now().isoformat()
                         report_metadata['sentTo'] = email_recipients
 
-                        invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
                         invoices_table.put_item(Item=report_metadata)
 
                         # Only update response if database update succeeded
