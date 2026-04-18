@@ -346,9 +346,8 @@ class TestValidation:
     def test_validate_email_too_long(self):
         """Validation should fail when email exceeds 254 characters"""
         # Create email with 255 characters
-        # @example.com = 12 characters, so we need 243 for local part
         local_part = 'a' * 243
-        email = f'{local_part}@example.com'  # 255 total chars (243 + 12)
+        email = f'{local_part}@example.com'  # 255 total chars
         data = {
             'name': 'Test User',
             'email': email,
@@ -361,7 +360,7 @@ class TestValidation:
     def test_validate_email_at_max_length(self):
         """Validation should pass when email is exactly 254 characters"""
         # Create email with 254 characters
-        local_part = 'a' * 239
+        local_part = 'a' * 242
         email = f'{local_part}@example.com'  # 254 total chars
         data = {
             'name': 'Test User',
@@ -377,7 +376,7 @@ class TestValidation:
             'name': 'Test User',
             'email': 'test@example.com',
             'rate': 25.0,
-            'personalEmail': 'a' * 255 + '@example.com'
+            'personalEmail': 'a' * 243 + '@example.com'  # 255 total chars
         }
         error = validate_profile_fields(data)
         assert error is not None
