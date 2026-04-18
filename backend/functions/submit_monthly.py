@@ -10,7 +10,7 @@ import boto3
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from services.db_service import query_invoices, get_user, put_invoice, get_invoice
+from services.db_service import query_invoices, get_user, get_invoice, put_invoice
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from services.logging_config import setup_logging
@@ -360,16 +360,24 @@ def handler(event, context):
                         from_email="noreply@goinvoi.com"
                     )
 
-                    # Update report status to 'sent' and record email metadata
-                    report_metadata['status'] = 'sent'
-                    report_metadata['sentAt'] = datetime.now().isoformat()
-                    report_metadata['sentTo'] = email_recipients
+                    # Persist updated status to DynamoDB first, before updating response
+                    # This ensures the response status matches the database state
+                    try:
+                        report_metadata['status'] = 'sent'
+                        report_metadata['sentAt'] = datetime.now().isoformat()
+                        report_metadata['sentTo'] = email_recipients
 
-                    # Persist updated status to DynamoDB
-                    put_invoice(report_metadata)
+                        invoices_table.put_item(Item=report_metadata)
 
-                    response_data['sent'] = email_recipients
-                    response_data['status'] = 'sent'
+                        # Only update response if database update succeeded
+                        response_data['sent'] = email_recipients
+                        response_data['status'] = 'sent'
+                    except ClientError as e:
+                        logger.error(f"Failed to update report status after email send: {str(e)}")
+                        # Email was sent but status update failed
+                        # Keep status as 'draft' to match database state
+                        response_data['sent'] = []
+                        response_data['emailWarning'] = f"Email sent to {', '.join(email_recipients)} but status update failed. Report remains in draft status."
 
                 except Exception as e:
                     # Email failed but report was saved successfully
