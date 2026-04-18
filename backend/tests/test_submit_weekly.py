@@ -8,7 +8,7 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from functions.submit_weekly import handler, _calculate_due_date, _populate_hours_from_default_shift
+from functions.submit_weekly import handler, _calculate_due_date, _populate_hours_from_default_shift, _increment_invoice_counter
 from botocore.exceptions import ClientError
 
 
@@ -87,18 +87,14 @@ class TestSubmitWeekly:
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
-                        with patch('functions.submit_weekly.put_invoice'):
-                            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                                with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
-                                    # Mock DynamoDB client for TransactWriteItems
-                                    mock_dynamodb_client = MagicMock()
-                                    mock_boto_client.return_value = mock_dynamodb_client
+                        # Mock _increment_invoice_counter to return the next counter value
+                        with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
+                            with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                # Mock DynamoDB resource for put_item
+                                mock_table = MagicMock()
+                                mock_boto_resource.return_value.Table.return_value = mock_table
 
-                                    # Mock DynamoDB resource for put_item
-                                    mock_table = MagicMock()
-                                    mock_boto_resource.return_value.Table.return_value = mock_table
-
-                                    response = handler(event, {})
+                                response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -335,15 +331,12 @@ class TestSubmitWeekly:
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
-                        with patch('functions.submit_weekly.put_invoice'):
-                            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                                with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
-                                    mock_dynamodb_client = MagicMock()
-                                    mock_boto_client.return_value = mock_dynamodb_client
-                                    mock_table = MagicMock()
-                                    mock_boto_resource.return_value.Table.return_value = mock_table
+                        with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
+                            with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                mock_table = MagicMock()
+                                mock_boto_resource.return_value.Table.return_value = mock_table
 
-                                    response = handler(event, {})
+                                response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -424,18 +417,14 @@ class TestSubmitWeekly:
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
-                        with patch('functions.submit_weekly.put_invoice'):
-                            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                                with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
-                                    # Mock DynamoDB client for TransactWriteItems
-                                    mock_dynamodb_client = MagicMock()
-                                    mock_boto_client.return_value = mock_dynamodb_client
+                        # Mock _increment_invoice_counter to return the next counter value
+                        with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
+                            with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                # Mock DynamoDB resource for put_item
+                                mock_table = MagicMock()
+                                mock_boto_resource.return_value.Table.return_value = mock_table
 
-                                    # Mock DynamoDB resource for put_item
-                                    mock_table = MagicMock()
-                                    mock_boto_resource.return_value.Table.return_value = mock_table
-
-                                    response = handler(event, {})
+                                response = handler(event, {})
 
         assert response['statusCode'] == 200
         # Lambda should NOT set CORS headers - API Gateway handles them
@@ -557,19 +546,18 @@ class TestSubmitWeekly:
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
-                        with patch('functions.submit_weekly.put_invoice'):
-                            with patch('functions.submit_weekly.send_weekly_email') as mock_send_email:
-                                with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                                    with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
-                                        # Mock DynamoDB client for TransactWriteItems
-                                        mock_dynamodb_client = MagicMock()
-                                        mock_boto_client.return_value = mock_dynamodb_client
+                        with patch('functions.submit_weekly.send_weekly_email') as mock_send_email:
+                            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                                with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                    # Mock DynamoDB client for TransactWriteItems
+                                    mock_dynamodb_client = MagicMock()
+                                    mock_boto_client.return_value = mock_dynamodb_client
 
-                                        # Mock DynamoDB resource for put_item
-                                        mock_table = MagicMock()
-                                        mock_boto_resource.return_value.Table.return_value = mock_table
+                                    # Mock DynamoDB resource for put_item
+                                    mock_table = MagicMock()
+                                    mock_boto_resource.return_value.Table.return_value = mock_table
 
-                                        response = handler(event, {})
+                                    response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -583,8 +571,8 @@ class TestSubmitWeekly:
         assert call_args[1]['to_addresses'] == ['client@example.com', 'accountant@example.com']
         assert call_args[1]['user_name'] == 'Test User'
 
-    def test_submit_weekly_transaction_cancelled(self):
-        """POST should handle TransactionCanceledException gracefully"""
+    def test_submit_weekly_duplicate_invoice(self):
+        """POST should handle duplicate invoice ID gracefully"""
         event = {
             'requestContext': {
                 'http': {'method': 'POST'},
@@ -647,18 +635,15 @@ class TestSubmitWeekly:
         # Mock PDF generation returning bytes
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
-        # Mock TransactionCanceledException
-        transaction_error = ClientError(
+        # Mock ConditionalCheckFailedException (invoice ID already exists)
+        duplicate_error = ClientError(
             {
                 'Error': {
-                    'Code': 'TransactionCanceledException',
-                    'Message': 'Transaction cancelled'
-                },
-                'CancellationReasons': [
-                    {'Code': 'ConditionalCheckFailed', 'Message': 'Invoice already exists'}
-                ]
+                    'Code': 'ConditionalCheckFailedException',
+                    'Message': 'The conditional request failed'
+                }
             },
-            'TransactWriteItems'
+            'PutItem'
         )
 
         with patch.dict(os.environ, {
@@ -668,18 +653,20 @@ class TestSubmitWeekly:
         }):
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
-                    with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                        # Mock DynamoDB client to raise TransactionCanceledException
-                        mock_dynamodb_client = MagicMock()
-                        mock_dynamodb_client.transact_write_items.side_effect = transaction_error
-                        mock_boto_client.return_value = mock_dynamodb_client
+                    with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
+                        with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                            # Mock DynamoDB resource to raise ConditionalCheckFailedException on put_item
+                            mock_table = MagicMock()
+                            mock_table.put_item.side_effect = duplicate_error
+                            mock_boto_resource.return_value.Table.return_value = mock_table
 
-                        response = handler(event, {})
+                            response = handler(event, {})
 
-        # Should return 500 error when transaction is cancelled
-        assert response['statusCode'] == 500
+        # Should return 400 error when invoice already exists (client sent duplicate)
+        assert response['statusCode'] == 400
         body = json.loads(response['body'])
         assert 'error' in body
+        assert 'already exists' in body['error'].lower()
 
     def test_submit_weekly_email_failure_returns_warning(self):
         """POST with email failure should return success with warning"""
@@ -753,19 +740,18 @@ class TestSubmitWeekly:
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
-                        with patch('functions.submit_weekly.put_invoice'):
-                            with patch('functions.submit_weekly.send_weekly_email', side_effect=Exception('SES error')):
-                                with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                                    with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
-                                        # Mock DynamoDB client for TransactWriteItems
-                                        mock_dynamodb_client = MagicMock()
-                                        mock_boto_client.return_value = mock_dynamodb_client
+                        with patch('functions.submit_weekly.send_weekly_email', side_effect=Exception('SES error')):
+                            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                                with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                    # Mock DynamoDB client for TransactWriteItems
+                                    mock_dynamodb_client = MagicMock()
+                                    mock_boto_client.return_value = mock_dynamodb_client
 
-                                        # Mock DynamoDB resource for put_item
-                                        mock_table = MagicMock()
-                                        mock_boto_resource.return_value.Table.return_value = mock_table
+                                    # Mock DynamoDB resource for put_item
+                                    mock_table = MagicMock()
+                                    mock_boto_resource.return_value.Table.return_value = mock_table
 
-                                        response = handler(event, {})
+                                    response = handler(event, {})
 
         # Should return 200 with warning, not error
         assert response['statusCode'] == 200
@@ -896,15 +882,14 @@ class TestSubmitWeekly:
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
-                        with patch('functions.submit_weekly.put_invoice'):
-                            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                                with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
-                                    mock_dynamodb_client = MagicMock()
-                                    mock_boto_client.return_value = mock_dynamodb_client
-                                    mock_table = MagicMock()
-                                    mock_boto_resource.return_value.Table.return_value = mock_table
+                        with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                            with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                mock_dynamodb_client = MagicMock()
+                                mock_boto_client.return_value = mock_dynamodb_client
+                                mock_table = MagicMock()
+                                mock_boto_resource.return_value.Table.return_value = mock_table
 
-                                    response = handler(event, {})
+                                response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -961,13 +946,8 @@ class TestSubmitWeekly:
         assert 'error' in body
         assert 'hours' in body['error'].lower() or 'default shift' in body['error'].lower()
 
-<<<<<<< Updated upstream
-    def test_submit_weekly_metadata_update_failure(self):
-        """POST should return 500 if metadata update fails after S3 upload succeeds"""
-=======
     def test_metadata_save_failure_deletes_orphaned_pdf(self):
         """When metadata save fails, the uploaded PDF should be deleted from S3"""
->>>>>>> Stashed changes
         event = {
             'requestContext': {
                 'http': {'method': 'POST'},
@@ -997,10 +977,6 @@ class TestSubmitWeekly:
             })
         }
 
-<<<<<<< Updated upstream
-        # Mock user config
-=======
->>>>>>> Stashed changes
         mock_user = {
             'userId': 'user-123',
             'name': 'Test User',
@@ -1008,10 +984,6 @@ class TestSubmitWeekly:
             'personalEmail': 'test@example.com',
             'rate': 28.00,
             'template': 'morning-light',
-<<<<<<< Updated upstream
-            'signatureFont': 'Dancing Script',
-=======
->>>>>>> Stashed changes
             'paymentTerms': 'receipt',
             'taxEnabled': False,
             'invoiceNumberConfig': {
@@ -1033,18 +1005,6 @@ class TestSubmitWeekly:
 
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
-<<<<<<< Updated upstream
-        # Mock metadata update failure
-        metadata_error = ClientError(
-            {
-                'Error': {
-                    'Code': 'ProvisionedThroughputExceededException',
-                    'Message': 'Request rate too high'
-                }
-            },
-            'PutItem'
-        )
-=======
         with patch.dict(os.environ, {
             'USERS_TABLE': 'users-table',
             'INVOICES_TABLE': 'invoices-table',
@@ -1054,23 +1014,20 @@ class TestSubmitWeekly:
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3') as mock_save_s3:
                         with patch('functions.submit_weekly.put_invoice') as mock_put_invoice:
-                            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                                # Mock DynamoDB client for TransactWriteItems (invoice number increment)
-                                mock_dynamodb_client = MagicMock()
-                                mock_boto_client.return_value = mock_dynamodb_client
+                            with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
+                                with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                    with patch('functions.submit_weekly.s3_client') as mock_s3_client:
+                                        # Mock DynamoDB resource for _create_invoice_record
+                                        mock_table = MagicMock()
+                                        mock_boto_resource.return_value.Table.return_value = mock_table
 
-                                # Mock S3 client for delete_object
-                                mock_s3_client = MagicMock()
+                                        # Simulate metadata save failure
+                                        mock_put_invoice.side_effect = ClientError(
+                                            {'Error': {'Code': 'ServiceUnavailable', 'Message': 'DynamoDB unavailable'}},
+                                            'PutItem'
+                                        )
 
-                                # Simulate metadata save failure
-                                mock_put_invoice.side_effect = ClientError(
-                                    {'Error': {'Code': 'ServiceUnavailable', 'Message': 'DynamoDB unavailable'}},
-                                    'PutItem'
-                                )
-
-                                # Patch s3_client used in the handler
-                                with patch('functions.submit_weekly.s3_client', mock_s3_client):
-                                    response = handler(event, {})
+                                        response = handler(event, {})
 
                         # Verify the response is an error
                         assert response['statusCode'] == 500
@@ -1148,7 +1105,6 @@ class TestSubmitWeekly:
         }
 
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
->>>>>>> Stashed changes
 
         with patch.dict(os.environ, {
             'USERS_TABLE': 'users-table',
@@ -1158,50 +1114,27 @@ class TestSubmitWeekly:
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
-<<<<<<< Updated upstream
-                        with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                            with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
-                                # Mock DynamoDB client for TransactWriteItems (succeeds)
-                                mock_dynamodb_client = MagicMock()
-                                mock_boto_client.return_value = mock_dynamodb_client
-
-                                # Mock DynamoDB resource for put_item (fails with metadata update error)
-                                mock_table = MagicMock()
-                                mock_table.put_item.side_effect = metadata_error
-                                mock_boto_resource.return_value.Table.return_value = mock_table
-
-                                response = handler(event, {})
-
-        # Should return 500 error when metadata update fails
-        assert response['statusCode'] == 500
-        body = json.loads(response['body'])
-        assert 'error' in body
-        assert 'metadata' in body['error'].lower()
-        # Should include helpful context about what failed
-        assert 'details' in body
-        assert 'PDF link' in body['details'] or 'pdfKey' in body.get('details', '')
-=======
                         with patch('functions.submit_weekly.put_invoice') as mock_put_invoice:
-                            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
-                                # Mock DynamoDB client for TransactWriteItems
-                                mock_dynamodb_client = MagicMock()
-                                mock_boto_client.return_value = mock_dynamodb_client
+                            with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
+                                with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
+                                    with patch('functions.submit_weekly.s3_client') as mock_s3_client:
+                                        # Mock DynamoDB resource for _create_invoice_record
+                                        mock_table = MagicMock()
+                                        mock_boto_resource.return_value.Table.return_value = mock_table
 
-                                # Mock S3 client that fails on delete
-                                mock_s3_client = MagicMock()
-                                mock_s3_client.delete_object.side_effect = ClientError(
-                                    {'Error': {'Code': 'AccessDenied', 'Message': 'Access denied'}},
-                                    'DeleteObject'
-                                )
+                                        # Mock S3 client that fails on delete
+                                        mock_s3_client.delete_object.side_effect = ClientError(
+                                            {'Error': {'Code': 'AccessDenied', 'Message': 'Access denied'}},
+                                            'DeleteObject'
+                                        )
 
-                                # Simulate metadata save failure
-                                mock_put_invoice.side_effect = ClientError(
-                                    {'Error': {'Code': 'ServiceUnavailable', 'Message': 'DynamoDB unavailable'}},
-                                    'PutItem'
-                                )
+                                        # Simulate metadata save failure
+                                        mock_put_invoice.side_effect = ClientError(
+                                            {'Error': {'Code': 'ServiceUnavailable', 'Message': 'DynamoDB unavailable'}},
+                                            'PutItem'
+                                        )
 
-                                with patch('functions.submit_weekly.s3_client', mock_s3_client):
-                                    response = handler(event, {})
+                                        response = handler(event, {})
 
                         # Should still return 500 even if S3 delete fails
                         assert response['statusCode'] == 500
@@ -1211,4 +1144,85 @@ class TestSubmitWeekly:
 
                         # Verify S3 delete was attempted (and failed)
                         mock_s3_client.delete_object.assert_called_once()
->>>>>>> Stashed changes
+
+    def test_increment_invoice_counter_success(self):
+        """_increment_invoice_counter should atomically increment and return new value"""
+        user_id = 'user-123'
+
+        # Mock DynamoDB client response
+        mock_response = {
+            'Attributes': {
+                'invoiceNumberConfig': {
+                    'M': {
+                        'nextNum': {'N': '42'}
+                    }
+                }
+            }
+        }
+
+        with patch.dict(os.environ, {'USERS_TABLE': 'users-table'}):
+            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                mock_dynamodb = MagicMock()
+                mock_dynamodb.update_item.return_value = mock_response
+                mock_boto_client.return_value = mock_dynamodb
+
+                result = _increment_invoice_counter(user_id)
+
+        assert result == 42
+        mock_dynamodb.update_item.assert_called_once()
+        call_args = mock_dynamodb.update_item.call_args[1]
+        assert call_args['TableName'] == 'users-table'
+        assert call_args['Key'] == {'userId': {'S': user_id}}
+        assert 'invoiceNumberConfig.nextNum + :inc' in call_args['UpdateExpression']
+
+    def test_increment_invoice_counter_user_not_found(self):
+        """_increment_invoice_counter should raise ValueError when user not found"""
+        user_id = 'user-nonexistent'
+
+        # Mock ConditionalCheckFailedException (user doesn't exist or config missing)
+        conditional_error = ClientError(
+            {
+                'Error': {
+                    'Code': 'ConditionalCheckFailedException',
+                    'Message': 'The conditional request failed'
+                }
+            },
+            'UpdateItem'
+        )
+
+        with patch.dict(os.environ, {'USERS_TABLE': 'users-table'}):
+            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                mock_dynamodb = MagicMock()
+                mock_dynamodb.update_item.side_effect = conditional_error
+                mock_boto_client.return_value = mock_dynamodb
+
+                with pytest.raises(ValueError) as exc_info:
+                    _increment_invoice_counter(user_id)
+
+        assert 'invoice counter not initialized' in str(exc_info.value)
+
+    def test_increment_invoice_counter_dynamodb_error(self):
+        """_increment_invoice_counter should raise ClientError for other DynamoDB errors"""
+        user_id = 'user-123'
+
+        # Mock other DynamoDB error (not ConditionalCheckFailedException)
+        throttle_error = ClientError(
+            {
+                'Error': {
+                    'Code': 'ProvisionedThroughputExceededException',
+                    'Message': 'Request rate too high'
+                }
+            },
+            'UpdateItem'
+        )
+
+        with patch.dict(os.environ, {'USERS_TABLE': 'users-table'}):
+            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                mock_dynamodb = MagicMock()
+                mock_dynamodb.update_item.side_effect = throttle_error
+                mock_boto_client.return_value = mock_dynamodb
+
+                with pytest.raises(ClientError) as exc_info:
+                    _increment_invoice_counter(user_id)
+
+        assert exc_info.value.response['Error']['Code'] == 'ProvisionedThroughputExceededException'
