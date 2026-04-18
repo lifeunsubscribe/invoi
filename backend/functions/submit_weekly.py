@@ -10,7 +10,7 @@ from decimal import Decimal
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from services.db_service import get_user
+from services.db_service import get_user, put_invoice
 from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
 from services.mail_service import send_weekly_email
 from services.logging_config import setup_logging
@@ -306,6 +306,7 @@ def handler(event, context):
         invoice_metadata['pdfKey'] = s3_key
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         # Save invoice metadata to DynamoDB
         # Note: The atomic transaction already created the basic record,
         # but we need to update it with the S3 key after upload succeeds.
@@ -341,6 +342,8 @@ def handler(event, context):
             'sent': []  # Initialize sent field - will be populated if email is sent
         }
 
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
         # Phase 3: Send email via SES if not save_only mode
@@ -388,8 +391,7 @@ def handler(event, context):
         # Save complete invoice metadata to DynamoDB (single write operation)
         # This replaces the double-write pattern that occurred when status was updated separately
         try:
-            invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
-            invoices_table.put_item(Item=invoice_metadata)
+            put_invoice(invoice_metadata)
         except ClientError as e:
             logger.error(f"Failed to save invoice metadata: {str(e)}")
             return {

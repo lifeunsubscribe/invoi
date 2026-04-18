@@ -157,6 +157,9 @@ def handler(event, context):
                 # Report already exists with complete data - return existing data (idempotent behavior)
                 logger.info(f"Report {report_id} already exists for user {user_id}. Returning existing report.")
                 # Convert Decimal values to float for JSON serialization
+                # Safely coerce totalHours and totalPay with fallback to 0
+                total_hours_value = existing_report.get('totalHours')
+                total_pay_value = existing_report.get('totalPay')
                 return {
                     'statusCode': 200,
                     'headers': headers,
@@ -164,8 +167,8 @@ def handler(event, context):
                         'reportId': existing_report.get('invoiceId'),
                         's3Key': existing_report.get('pdfKey'),
                         'monthLabel': existing_report.get('monthLabel'),
-                        'totalHours': float(existing_report.get('totalHours')),
-                        'totalPay': float(existing_report.get('totalPay')),
+                        'totalHours': float(total_hours_value) if total_hours_value is not None else 0.0,
+                        'totalPay': float(total_pay_value) if total_pay_value is not None else 0.0,
                         'weekCount': existing_report.get('weekCount'),
                         'status': existing_report.get('status'),
                         'createdAt': existing_report.get('createdAt'),
