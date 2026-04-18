@@ -21,6 +21,9 @@ from botocore.exceptions import ClientError
 setup_logging()
 logger = logging.getLogger(__name__)
 
+# S3 client for rollback operations
+s3_client = boto3.client('s3')
+
 
 def handler(event, context):
     """
@@ -275,6 +278,7 @@ def handler(event, context):
         total_pay = total_hours * rate
 
         # Save report metadata to Invoices table with type="monthly"
+        # Convert numeric values to Decimal for DynamoDB compatibility
         report_metadata = {
             'userId': user_id,
             'invoiceId': report_id,
@@ -284,16 +288,39 @@ def handler(event, context):
             'month': month_int,
             'monthLabel': month_label,
             'weekCount': len(week_data),
-            'totalHours': total_hours,
-            'rate': rate,
-            'totalPay': total_pay,
+            'totalHours': Decimal(str(total_hours)),
+            'rate': Decimal(str(rate)),
+            'totalPay': Decimal(str(total_pay)),
             'pdfKey': s3_key,
             'sentAt': None,
             'sentTo': [],
             'createdAt': datetime.now().isoformat()
         }
 
-        put_invoice(report_metadata)
+        # Save report metadata to DynamoDB
+        # CRITICAL: If metadata save fails, we must delete the orphaned PDF from S3
+        # to prevent storage leaks and maintain data consistency
+        try:
+            put_invoice(report_metadata)
+        except Exception as e:
+            # Metadata save failed - rollback by deleting the uploaded PDF from S3
+            logger.error(f"Failed to save report metadata: {str(e)}")
+            logger.warning(f"Rolling back S3 upload by deleting {s3_key}")
+
+            try:
+                s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
+                logger.info(f"Successfully deleted orphaned PDF from S3: {s3_key}")
+            except Exception as s3_error:
+                # S3 cleanup also failed - log both errors
+                logger.error(f"CRITICAL: Failed to delete orphaned PDF from S3: {s3_key} - {str(s3_error)}")
+                logger.error(f"Manual cleanup required: bucket={bucket_name} key={s3_key}")
+
+            # Return error to user - the report was NOT saved
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Failed to save report metadata to database'})
+            }
 
         # Prepare response data
         # Convert Decimal to float for JSON serialization
