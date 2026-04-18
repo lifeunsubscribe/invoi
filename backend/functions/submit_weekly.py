@@ -527,8 +527,13 @@ def _create_invoice_record(user_id, user_config, hours, week, active_client,
     # Create invoice metadata
     # Convert numeric values to Decimal for DynamoDB compatibility
     invoice_id = week['invNum']
+<<<<<<< Updated upstream
     # Convert dailyHours to Decimal for DynamoDB compatibility
     daily_hours_decimal = {day: Decimal(str(val)) for day, val in hours.items()}
+=======
+    # Convert dailyHours values to Decimal (they may be floats from default shift calculation)
+    daily_hours_decimal = {day: Decimal(str(hours_val)) for day, hours_val in hours.items()}
+>>>>>>> Stashed changes
 
     invoice_metadata = {
         'userId': user_id,
@@ -542,12 +547,21 @@ def _create_invoice_record(user_id, user_config, hours, week, active_client,
         'dueDate': due_date,
         'paymentTerms': payment_terms,
         'dailyHours': daily_hours_decimal,
+<<<<<<< Updated upstream
         'totalHours': total_hours,
         'rate': rate,
         'subtotal': subtotal,
         'taxRate': tax_rate,
         'taxAmount': tax_amount,
         'totalPay': total_pay,
+=======
+        'totalHours': Decimal(str(total_hours)),
+        'rate': Decimal(str(rate)),
+        'subtotal': Decimal(str(subtotal)),
+        'taxRate': Decimal(str(tax_rate)),
+        'taxAmount': Decimal(str(tax_amount)),
+        'totalPay': Decimal(str(total_pay)),
+>>>>>>> Stashed changes
         'template': user_config.get('template', 'morning-light'),
         'sentAt': None,  # Will be set in Phase 3 when email is sent
         'sentTo': [],

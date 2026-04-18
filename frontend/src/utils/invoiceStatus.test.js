@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getInvoiceStatus } from './invoiceStatus.js';
 
 describe('getInvoiceStatus', () => {
@@ -43,12 +43,12 @@ describe('getInvoiceStatus', () => {
     expect(getInvoiceStatus(invoice)).toBe('overdue');
   });
 
-  it('should return "overdue" for sent invoices due today (boundary case)', () => {
+  it('should return "sent" for sent invoices due today (boundary case)', () => {
     const invoice = {
       status: 'sent',
-      dueDate: '2026-04-14' // Yesterday
+      dueDate: '2026-04-15' // Today (system time is 2026-04-15)
     };
-    expect(getInvoiceStatus(invoice)).toBe('overdue');
+    expect(getInvoiceStatus(invoice)).toBe('sent');
   });
 
   it('should return "draft" for invoices with no status', () => {

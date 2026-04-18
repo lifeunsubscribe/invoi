@@ -5,7 +5,6 @@ Shared utilities for interacting with S3 storage across Lambda functions.
 """
 import base64
 import logging
-import boto3
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
