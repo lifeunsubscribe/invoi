@@ -5,7 +5,6 @@ import os
 from datetime import datetime
 from decimal import Decimal
 import calendar
-import base64
 import boto3
 
 # Add parent directory to path for imports
@@ -15,18 +14,12 @@ from services.db_service import query_invoices, get_user, put_invoice, get_invoi
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from services.logging_config import setup_logging
-from services.auth_utils import extract_user_id_from_token
-from services.s3_utils import fetch_logo_from_s3
+from services.s3_service import fetch_logo_from_s3
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# S3 client for logo fetching
-s3_client = boto3.client('s3')
-# SST Ion provides bucket name via SST_Resource_<name>_name when linked
-BUCKET_NAME = os.environ.get('SST_Resource_InvoiStorage_name')
 
 
 def handler(event, context):
@@ -166,8 +159,8 @@ def handler(event, context):
                         'reportId': existing_report.get('invoiceId'),
                         's3Key': existing_report.get('pdfKey'),
                         'monthLabel': existing_report.get('monthLabel'),
-                        'totalHours': float(existing_report.get('totalHours')) if existing_report.get('totalHours') is not None else 0,
-                        'totalPay': float(existing_report.get('totalPay')) if existing_report.get('totalPay') is not None else 0,
+                        'totalHours': float(existing_report.get('totalHours', 0)),
+                        'totalPay': float(existing_report.get('totalPay', 0)),
                         'weekCount': existing_report.get('weekCount'),
                         'status': existing_report.get('status'),
                         'createdAt': existing_report.get('createdAt'),
@@ -225,7 +218,7 @@ def handler(event, context):
         logo_key = user_config.get('logoKey')
         if logo_key:
             try:
-                logo_data = fetch_logo_from_s3(s3_client, BUCKET_NAME, logo_key)
+                logo_data = fetch_logo_from_s3(logo_key)
             except Exception as e:
                 # Log error but don't fail - report can be generated without logo
                 logger.warning(f"Failed to fetch logo from S3: {str(e)}")
@@ -260,11 +253,12 @@ def handler(event, context):
         save_pdf_to_s3(pdf_bytes, bucket_name, s3_key)
 
         # Calculate totals for metadata
-        total_hours = sum(w['hours'] for w in week_data)
+        # Use Decimal for DynamoDB compatibility
+        total_hours = sum(Decimal(str(w['hours'])) for w in week_data)
 
-        # Safely coerce rate to float with validation
+        # Safely coerce rate to Decimal with validation
         try:
-            rate = float(user_config.get('rate', 0))
+            rate = Decimal(str(user_config.get('rate', 0)))
             if rate < 0:
                 return {
                     'statusCode': 500,
@@ -308,8 +302,8 @@ def handler(event, context):
             'reportId': report_id,
             's3Key': s3_key,
             'monthLabel': month_label,
-            'totalHours': float(report_metadata['totalHours']),
-            'totalPay': float(report_metadata['totalPay']),
+            'totalHours': float(total_hours),
+            'totalPay': float(total_pay),
             'weekCount': len(week_data),
             'status': report_metadata['status'],
             'createdAt': report_metadata['createdAt']
@@ -396,3 +390,26 @@ def handler(event, context):
         }
 
 
+def _extract_user_id_from_token(event):
+    """
+    Extract userId from JWT token claims.
+
+    Returns None if no valid JWT claims are present.
+    """
+    # Check for Cognito authorizer claims (API Gateway v2 with JWT authorizer)
+    try:
+        claims = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {})
+        if claims and 'sub' in claims:
+            return claims.get('sub')
+    except (KeyError, AttributeError):
+        pass
+
+    # Fallback: check for lambda authorizer format (API Gateway v1)
+    try:
+        authorizer = event.get('requestContext', {}).get('authorizer', {})
+        if authorizer and 'claims' in authorizer and 'sub' in authorizer['claims']:
+            return authorizer['claims'].get('sub')
+    except (KeyError, AttributeError):
+        pass
+
+    return None
