@@ -1113,7 +1113,11 @@ class TestSubmitWeekly:
         }):
             with patch('functions.submit_weekly.get_user', return_value=mock_user):
                 with patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes):
+<<<<<<< Updated upstream
                     with patch('functions.submit_weekly.save_pdf_to_s3'):
+=======
+                    with patch('functions.submit_weekly.save_pdf_to_s3') as mock_save_s3:
+>>>>>>> Stashed changes
                         with patch('functions.submit_weekly.put_invoice') as mock_put_invoice:
                             with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
                                 with patch('functions.submit_weekly.boto3.resource') as mock_boto_resource:
@@ -1144,6 +1148,7 @@ class TestSubmitWeekly:
 
                         # Verify S3 delete was attempted (and failed)
                         mock_s3_client.delete_object.assert_called_once()
+<<<<<<< Updated upstream
 
     def test_increment_invoice_counter_success(self):
         """_increment_invoice_counter should atomically increment and return new value"""
@@ -1226,3 +1231,5 @@ class TestSubmitWeekly:
                     _increment_invoice_counter(user_id)
 
         assert exc_info.value.response['Error']['Code'] == 'ProvisionedThroughputExceededException'
+=======
+>>>>>>> Stashed changes
