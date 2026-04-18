@@ -693,7 +693,11 @@ class TestSubmitWeekly:
                         with patch('functions.submit_weekly._create_invoice_record', side_effect=ValueError('Invoice already exists')):
                             response = handler(event, {})
 
+<<<<<<< Updated upstream
         # Should return 400 error when invoice already exists (client sent duplicate)
+=======
+        # Should return 400 error when transaction is cancelled (converted to ValueError)
+>>>>>>> Stashed changes
         assert response['statusCode'] == 400
         body = json.loads(response['body'])
         assert 'error' in body

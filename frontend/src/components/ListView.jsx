@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { getAuthToken } from "../auth.jsx";
+import { getInvoiceStatus } from "../utils/invoiceStatus.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -24,27 +25,6 @@ const STATUS_LABELS = {
   paid: "Paid",
   overdue: "Overdue"
 };
-
-/**
- * Determine invoice status (including overdue calculation)
- * Shared logic from CalendarView.jsx
- */
-function getInvoiceStatus(invoice) {
-  if (invoice.status === "paid") return "paid";
-  if (invoice.status === "sent") {
-    // Check if overdue
-    if (invoice.dueDate) {
-      const dueDate = new Date(invoice.dueDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (dueDate < today) {
-        return "overdue";
-      }
-    }
-    return "sent";
-  }
-  return "draft";
-}
 
 /**
  * Extract unique client names/IDs from invoices for filter dropdown

@@ -14,6 +14,7 @@ from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format
 from services.mail_service import send_weekly_email
 from services.logging_config import setup_logging
 from services.s3_service import fetch_logo_from_s3
+from services.auth_utils import extract_user_id_from_token
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
@@ -68,7 +69,7 @@ def handler(event, context):
                 'body': json.dumps({'error': 'Missing Authorization header'})
             }
 
-        user_id = _extract_user_id_from_token(event)
+        user_id = extract_user_id_from_token(event)
 
         if not user_id:
             return {
@@ -393,6 +394,7 @@ def handler(event, context):
             if email_recipients:
                 try:
                     # Send invoice email with PDF attachment
+                    # Convert Decimal to float for email service
                     send_weekly_email(
                         to_addresses=email_recipients,
                         user_name=user_config.get('name', 'Contractor'),
@@ -692,28 +694,3 @@ def _populate_hours_from_default_shift(default_shift):
             logger.warning(f"Unrecognized day abbreviation '{abbrev_day}' in default shift configuration. Expected one of: {', '.join(day_mapping.keys())}")
 
     return hours
-
-
-def _extract_user_id_from_token(event):
-    """
-    Extract userId from JWT token claims.
-
-    Returns None if no valid JWT claims are present.
-    """
-    # Check for Cognito authorizer claims (API Gateway v2 with JWT authorizer)
-    try:
-        claims = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {})
-        if claims and 'sub' in claims:
-            return claims.get('sub')
-    except (KeyError, AttributeError):
-        pass
-
-    # Fallback: check for lambda authorizer format (API Gateway v1)
-    try:
-        authorizer = event.get('requestContext', {}).get('authorizer', {})
-        if authorizer and 'claims' in authorizer and 'sub' in authorizer['claims']:
-            return authorizer['claims'].get('sub')
-    except (KeyError, AttributeError):
-        pass
-
-    return None

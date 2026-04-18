@@ -65,7 +65,7 @@ def handler(event, context):
                 'body': json.dumps({'error': 'Missing Authorization header'})
             }
 
-        user_id = _extract_user_id_from_token(event)
+        user_id = extract_user_id_from_token(event)
 
         if not user_id:
             return {
@@ -349,12 +349,13 @@ def handler(event, context):
             if email_recipients:
                 try:
                     # Send monthly report email with PDF attachment
+                    # Convert Decimal to float for email service
                     send_monthly_email(
                         to_addresses=email_recipients,
                         user_name=user_config.get('name', 'Contractor'),
                         month_label=month_label,
-                        total_hours=total_hours,
-                        total_pay=total_pay,
+                        total_hours=float(report_metadata['totalHours']),
+                        total_pay=float(report_metadata['totalPay']),
                         pdf_data=pdf_bytes,
                         pdf_filename=f"{report_id}.pdf",
                         from_email="noreply@goinvoi.com"
