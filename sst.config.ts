@@ -114,10 +114,24 @@ export default $config({
         allowHeaders: ["Content-Type", "Authorization"],
       },
       transform: {
-        // Configure API Gateway throttling to prevent abuse
-        // Rate limit: 100 requests/second (aggregate across all users at stage level)
-        // Burst limit: 200 requests (handles short traffic spikes)
-        // When exceeded, API Gateway returns 429 Too Many Requests
+        // Configure API Gateway stage-level throttling to prevent abuse
+        //
+        // STAGE-LEVEL THROTTLING (Current Implementation):
+        // - Applies to ALL users collectively at the API stage
+        // - One bad actor CAN impact other users by exhausting the shared quota
+        // - Rate limit: 100 requests/second (aggregate across all users)
+        // - Burst limit: 200 requests (handles short traffic spikes)
+        // - Returns 429 Too Many Requests when limits exceeded
+        //
+        // LIMITATIONS (HTTP API v2):
+        // - Custom rate limit headers (X-RateLimit-*) are NOT supported
+        // - Would require REST API (v1) + Usage Plans for per-user limits
+        // - See issue #126 for per-user rate limiting discussion
+        //
+        // RATIONALE FOR LIMITS:
+        // - 100 req/s = 360K requests/hour, sufficient for small-medium apps
+        // - 200 burst = handles login spikes, batch operations
+        // - Conservative defaults prevent surprise AWS bills
         api: (args) => {
           args.defaultRouteSettings = {
             throttlingBurstLimit: 200,
