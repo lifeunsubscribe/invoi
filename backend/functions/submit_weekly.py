@@ -308,8 +308,41 @@ def handler(event, context):
         # to prevent storage leaks and maintain data consistency
         try:
             put_invoice(invoice_metadata)
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+
+            # Check if this is a duplicate invoice error
+            if error_code == 'ConditionalCheckFailedException':
+                # Invoice already exists - this is a client error (duplicate submission)
+                logger.error(f"Invoice {invoice_id} already exists - duplicate submission")
+                # Don't need to delete PDF since the invoice already exists
+                return {
+                    'statusCode': 400,
+                    'headers': headers,
+                    'body': json.dumps({'error': f'Invoice {invoice_id} already exists'})
+                }
+
+            # Other DynamoDB errors - rollback by deleting the uploaded PDF from S3
+            logger.error(f"Failed to save invoice metadata: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but metadata update failed for user {user_id}")
+            logger.warning(f"Rolling back S3 upload by deleting {s3_key}")
+
+            try:
+                s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
+                logger.info(f"Successfully deleted orphaned PDF from S3: {s3_key}")
+            except Exception as s3_error:
+                # S3 cleanup also failed - log both errors
+                logger.error(f"CRITICAL: Failed to delete orphaned PDF from S3: {s3_key} - {str(s3_error)}")
+                logger.error(f"Manual cleanup required: bucket={bucket_name} key={s3_key}")
+
+            # Return error to user - the invoice was NOT saved
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Failed to save invoice metadata to database'})
+            }
         except Exception as e:
-            # Metadata save failed - rollback by deleting the uploaded PDF from S3
+            # Non-DynamoDB errors - rollback by deleting the uploaded PDF from S3
             logger.error(f"Failed to save invoice metadata: {str(e)}")
             logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but metadata update failed for user {user_id}")
             logger.warning(f"Rolling back S3 upload by deleting {s3_key}")
@@ -536,8 +569,6 @@ def _create_invoice_record(user_id, user_config, hours, week, active_client,
 
     # Create invoice metadata (convert numeric values to Decimal for DynamoDB)
     invoice_id = week['invNum']
-    # Convert dailyHours to Decimal for DynamoDB compatibility
-    daily_hours_decimal = {day: Decimal(str(val)) for day, val in hours.items()}
 
     invoice_metadata = {
         'userId': user_id,
