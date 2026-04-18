@@ -672,10 +672,11 @@ class TestSubmitWeekly:
 
                         response = handler(event, {})
 
-        # Should return 500 error when transaction is cancelled
-        assert response['statusCode'] == 500
+        # Should return 400 error when transaction is cancelled (validation error)
+        assert response['statusCode'] == 400
         body = json.loads(response['body'])
         assert 'error' in body
+        assert 'Invoice already exists or user configuration error' in body['error']
 
     def test_submit_weekly_email_failure_returns_warning(self):
         """POST with email failure should return success with warning"""
