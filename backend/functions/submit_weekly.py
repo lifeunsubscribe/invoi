@@ -572,11 +572,18 @@ def _create_invoice_record(user_id, user_config, hours, week, active_client,
         )
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', '')
+<<<<<<< Updated upstream
         if error_code == 'ConditionalCheckFailedException':
             # Invoice ID already exists
             logger.error(f"Invoice {invoice_metadata['invoiceId']} already exists")
             raise ValueError('Invoice already exists')
         logger.error(f"Failed to create invoice record: {str(e)}")
+=======
+        if error_code == 'TransactionCanceledException':
+            # Transaction failed - likely duplicate invoiceId or user not found
+            cancellation_reasons = e.response.get('CancellationReasons', [])
+            logger.error(f"Transaction cancelled: {cancellation_reasons}")
+>>>>>>> Stashed changes
         raise
 
     return invoice_metadata
