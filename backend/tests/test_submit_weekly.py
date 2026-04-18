@@ -8,7 +8,7 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from functions.submit_weekly import handler, _calculate_due_date, _populate_hours_from_default_shift
+from functions.submit_weekly import handler, _calculate_due_date, _populate_hours_from_default_shift, _increment_invoice_counter
 from botocore.exceptions import ClientError
 
 
@@ -1032,9 +1032,10 @@ class TestSubmitWeekly:
                                 mock_dynamodb_client = MagicMock()
                                 mock_boto_client.return_value = mock_dynamodb_client
 
-                                # Mock DynamoDB resource for put_item (fails with metadata update error)
+                                # Mock DynamoDB resource for put_item
+                                # First call (create invoice record) succeeds, second call (metadata update) fails
                                 mock_table = MagicMock()
-                                mock_table.put_item.side_effect = metadata_error
+                                mock_table.put_item.side_effect = [None, metadata_error]
                                 mock_boto_resource.return_value.Table.return_value = mock_table
 
                                 response = handler(event, {})
@@ -1047,3 +1048,85 @@ class TestSubmitWeekly:
         # Should include helpful context about what failed
         assert 'details' in body
         assert 'PDF link' in body['details'] or 'pdfKey' in body.get('details', '')
+
+    def test_increment_invoice_counter_success(self):
+        """_increment_invoice_counter should atomically increment and return new value"""
+        user_id = 'user-123'
+
+        # Mock DynamoDB client response
+        mock_response = {
+            'Attributes': {
+                'invoiceNumberConfig': {
+                    'M': {
+                        'nextNum': {'N': '42'}
+                    }
+                }
+            }
+        }
+
+        with patch.dict(os.environ, {'USERS_TABLE': 'users-table'}):
+            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                mock_dynamodb = MagicMock()
+                mock_dynamodb.update_item.return_value = mock_response
+                mock_boto_client.return_value = mock_dynamodb
+
+                result = _increment_invoice_counter(user_id)
+
+        assert result == 42
+        mock_dynamodb.update_item.assert_called_once()
+        call_args = mock_dynamodb.update_item.call_args[1]
+        assert call_args['TableName'] == 'users-table'
+        assert call_args['Key'] == {'userId': {'S': user_id}}
+        assert 'invoiceNumberConfig.nextNum + :inc' in call_args['UpdateExpression']
+
+    def test_increment_invoice_counter_user_not_found(self):
+        """_increment_invoice_counter should raise ValueError when user not found"""
+        user_id = 'user-nonexistent'
+
+        # Mock ConditionalCheckFailedException (user doesn't exist or config missing)
+        conditional_error = ClientError(
+            {
+                'Error': {
+                    'Code': 'ConditionalCheckFailedException',
+                    'Message': 'The conditional request failed'
+                }
+            },
+            'UpdateItem'
+        )
+
+        with patch.dict(os.environ, {'USERS_TABLE': 'users-table'}):
+            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                mock_dynamodb = MagicMock()
+                mock_dynamodb.update_item.side_effect = conditional_error
+                mock_boto_client.return_value = mock_dynamodb
+
+                with pytest.raises(ValueError) as exc_info:
+                    _increment_invoice_counter(user_id)
+
+        assert 'invoice counter not initialized' in str(exc_info.value)
+
+    def test_increment_invoice_counter_dynamodb_error(self):
+        """_increment_invoice_counter should raise ClientError for other DynamoDB errors"""
+        user_id = 'user-123'
+
+        # Mock other DynamoDB error (not ConditionalCheckFailedException)
+        throttle_error = ClientError(
+            {
+                'Error': {
+                    'Code': 'ProvisionedThroughputExceededException',
+                    'Message': 'Request rate too high'
+                }
+            },
+            'UpdateItem'
+        )
+
+        with patch.dict(os.environ, {'USERS_TABLE': 'users-table'}):
+            with patch('functions.submit_weekly.boto3.client') as mock_boto_client:
+                mock_dynamodb = MagicMock()
+                mock_dynamodb.update_item.side_effect = throttle_error
+                mock_boto_client.return_value = mock_dynamodb
+
+                with pytest.raises(ClientError) as exc_info:
+                    _increment_invoice_counter(user_id)
+
+        assert exc_info.value.response['Error']['Code'] == 'ProvisionedThroughputExceededException'

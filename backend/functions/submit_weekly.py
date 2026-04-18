@@ -238,6 +238,7 @@ def handler(event, context):
             )
         except Exception as e:
             logger.error(f"PDF generation failed: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but PDF generation failed for user {user_id}")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -246,6 +247,7 @@ def handler(event, context):
 
         # Validate PDF generation succeeded
         if not pdf_bytes:
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but PDF generation returned empty result for user {user_id}")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -254,17 +256,34 @@ def handler(event, context):
 
         # Create invoice database record
         # Note: Invoice number was already atomically incremented above, so this just creates the record
-        invoice_metadata = _create_invoice_record(
-            user_id=user_id,
-            user_config=user_config,
-            hours=hours,
-            week=week,
-            active_client=active_client,
-            client_email=client_email,
-            accountant_email=accountant_email,
-            save_only=save_only,
-            invoice_number=invoice_number
-        )
+        try:
+            invoice_metadata = _create_invoice_record(
+                user_id=user_id,
+                user_config=user_config,
+                hours=hours,
+                week=week,
+                active_client=active_client,
+                client_email=client_email,
+                accountant_email=accountant_email,
+                save_only=save_only,
+                invoice_number=invoice_number
+            )
+        except ValueError as e:
+            logger.error(f"Failed to create invoice record: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but invoice record creation failed for user {user_id}")
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'error': str(e)})
+            }
+        except ClientError as e:
+            logger.error(f"Failed to create invoice record: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but invoice record creation failed for user {user_id}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Failed to create invoice record'})
+            }
 
         # Upload PDF to S3 at users/{userId}/weekly/{invoiceId}.pdf
         bucket_name = os.environ['SST_Resource_InvoiStorage_name']
@@ -275,6 +294,7 @@ def handler(event, context):
             save_pdf_to_s3(pdf_bytes, bucket_name, s3_key)
         except Exception as e:
             logger.error(f"S3 upload failed: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but S3 upload failed for user {user_id}")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -295,6 +315,7 @@ def handler(event, context):
             invoices_table.put_item(Item=invoice_metadata)
         except ClientError as e:
             logger.error(f"Failed to update invoice metadata with pdfKey: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but metadata update failed for user {user_id}")
             return {
                 'statusCode': 500,
                 'headers': headers,
