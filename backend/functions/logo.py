@@ -12,17 +12,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_user, put_user
 from services.logging_config import setup_logging
+from services.s3_service import get_s3_client, get_bucket_name
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# S3 client for logo storage
-s3_client = boto3.client('s3')
-
-# Get bucket name from SST Resource environment variable
-# SST Ion provides bucket name via SST_Resource_<name>_name when linked
-BUCKET_NAME = os.environ.get('SST_Resource_InvoiStorage_name')
 
 # Maximum logo file size (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB in bytes
@@ -141,7 +135,9 @@ def handle_get(user_id, headers):
 
         # Fetch logo from S3
         try:
-            response = s3_client.get_object(Bucket=BUCKET_NAME, Key=logo_key)
+            s3_client = get_s3_client()
+            bucket_name = get_bucket_name()
+            response = s3_client.get_object(Bucket=bucket_name, Key=logo_key)
             logo_bytes = response['Body'].read()
             content_type = response.get('ContentType', 'application/octet-stream')
 
@@ -293,17 +289,20 @@ def handle_upload(user_id, event, headers):
 
         # Delete old logo file if it exists with a different extension
         # This prevents orphaned files when switching between PNG/JPG formats
+        s3_client = get_s3_client()
+        bucket_name = get_bucket_name()
+
         if user.get('logoKey') and user['logoKey'] != s3_key:
             old_logo_key = user['logoKey']
             try:
-                s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_logo_key)
+                s3_client.delete_object(Bucket=bucket_name, Key=old_logo_key)
                 logger.info(f"Deleted old logo: {old_logo_key}")
             except ClientError as e:
                 # Log but don't fail - old file might already be deleted
                 logger.warning(f"Failed to delete old logo (non-fatal): {str(e)}")
 
         s3_client.put_object(
-            Bucket=BUCKET_NAME,
+            Bucket=bucket_name,
             Key=s3_key,
             Body=image_bytes,
             ContentType=content_type,
@@ -373,8 +372,10 @@ def handle_delete(user_id, headers):
 
         # Delete from S3
         try:
+            s3_client = get_s3_client()
+            bucket_name = get_bucket_name()
             s3_client.delete_object(
-                Bucket=BUCKET_NAME,
+                Bucket=bucket_name,
                 Key=logo_key
             )
         except ClientError as e:

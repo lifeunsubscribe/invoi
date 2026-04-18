@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from services.s3_service import fetch_logo_from_s3
+from services.s3_service import fetch_logo_from_s3, get_s3_client, get_bucket_name, _reset_s3_client
 
 
 class TestFetchLogoFromS3:
@@ -171,3 +171,62 @@ class TestFetchLogoFromS3:
         mock_s3.get_object.assert_called_once()
         call_kwargs = mock_s3.get_object.call_args[1]
         assert call_kwargs['Bucket'] == 'env-bucket'
+
+
+class TestGetS3Client:
+    """Tests for get_s3_client() function"""
+
+    def test_get_s3_client_returns_client(self):
+        """Test that get_s3_client() returns a boto3 S3 client"""
+        # Reset client to ensure fresh initialization
+        _reset_s3_client()
+
+        with patch('services.s3_service.boto3') as mock_boto3:
+            mock_client = MagicMock()
+            mock_boto3.client.return_value = mock_client
+
+            # Get client
+            client = get_s3_client()
+
+            # Verify boto3.client was called with 's3'
+            mock_boto3.client.assert_called_once_with('s3')
+            assert client == mock_client
+
+    def test_get_s3_client_lazy_initialization(self):
+        """Test that get_s3_client() reuses the same client instance"""
+        # Reset client to ensure fresh initialization
+        _reset_s3_client()
+
+        with patch('services.s3_service.boto3') as mock_boto3:
+            mock_client = MagicMock()
+            mock_boto3.client.return_value = mock_client
+
+            # Get client multiple times
+            client1 = get_s3_client()
+            client2 = get_s3_client()
+
+            # Verify boto3.client was called only once (lazy initialization)
+            mock_boto3.client.assert_called_once_with('s3')
+            assert client1 is client2
+
+
+class TestGetBucketName:
+    """Tests for get_bucket_name() function"""
+
+    def test_get_bucket_name_success(self):
+        """Test successful bucket name retrieval from environment"""
+        with patch.dict(os.environ, {'SST_Resource_InvoiStorage_name': 'my-test-bucket'}):
+            bucket_name = get_bucket_name()
+            assert bucket_name == 'my-test-bucket'
+
+    def test_get_bucket_name_missing_env_var(self):
+        """Test get_bucket_name() raises ValueError when env var is not set"""
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ValueError, match="SST_Resource_InvoiStorage_name environment variable must be set"):
+                get_bucket_name()
+
+    def test_get_bucket_name_empty_env_var(self):
+        """Test get_bucket_name() raises ValueError when env var is empty"""
+        with patch.dict(os.environ, {'SST_Resource_InvoiStorage_name': ''}):
+            with pytest.raises(ValueError, match="SST_Resource_InvoiStorage_name environment variable must be set"):
+                get_bucket_name()

@@ -12,13 +12,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from services.db_service import get_invoice, get_user
 from services.mail_service import send_email
 from services.logging_config import setup_logging
+from services.s3_service import get_s3_client, get_bucket_name
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# S3 client for fetching PDFs
-s3_client = boto3.client('s3')
 
 
 def handler(event, context):
@@ -101,10 +99,12 @@ def handler(event, context):
                 'body': json.dumps({'error': 'User configuration not found'})
             }
 
-        # Get bucket name from environment
-        bucket_name = os.environ.get('InvoiStorage') or os.environ.get('SST_Resource_InvoiStorage_name')
-        if not bucket_name:
-            logger.error("InvoiStorage bucket name not found in environment")
+        # Get S3 client and bucket name
+        s3_client = get_s3_client()
+        try:
+            bucket_name = get_bucket_name()
+        except ValueError as e:
+            logger.error(f"S3 bucket name not configured: {e}")
             return {
                 'statusCode': 500,
                 'headers': headers,

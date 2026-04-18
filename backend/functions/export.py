@@ -15,13 +15,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_invoice
 from services.logging_config import setup_logging
+from services.s3_service import get_s3_client
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# Initialize AWS clients
-s3_client = boto3.client('s3')
 
 
 def handler(event, context):
@@ -194,7 +192,8 @@ def _handle_csv_export(user_id, invoices, headers):
         csv_content = csv_buffer.getvalue().encode('utf-8')
         csv_buffer.close()
 
-        # Upload to S3
+        # Get S3 client
+        s3_client = get_s3_client()
         bucket_name = os.environ.get('InvoiStorage')
         if not bucket_name:
             logger.error("InvoiStorage bucket name not found in environment")
@@ -265,6 +264,8 @@ def _handle_zip_export(user_id, invoices, headers):
     with progress tokens to avoid Lambda timeout.
     """
     try:
+        # Get S3 client
+        s3_client = get_s3_client()
         bucket_name = os.environ.get('InvoiStorage')
         if not bucket_name:
             logger.error("InvoiStorage bucket name not found in environment")
