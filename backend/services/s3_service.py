@@ -10,6 +10,8 @@ Main Functions:
 Helpers:
     _get_s3_client() -> boto3.client
         Lazy-initialize S3 client.
+    _reset_s3_client() -> None
+        Reset S3 client for test isolation.
 """
 
 import os
@@ -30,6 +32,12 @@ def _get_s3_client():
     if _s3_client is None:
         _s3_client = boto3.client('s3')
     return _s3_client
+
+
+def _reset_s3_client():
+    """Reset S3 client to None for test isolation."""
+    global _s3_client
+    _s3_client = None
 
 
 def fetch_logo_from_s3(logo_key, bucket_name=None):
