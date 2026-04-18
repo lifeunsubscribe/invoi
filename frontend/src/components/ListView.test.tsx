@@ -8,13 +8,19 @@ const mockConfig = {
 
 // Generate dates relative to test execution time to prevent flaky tests
 const now = new Date();
-const formatDate = (date) => date.toISOString().split('T')[0];
+const formatDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 // Recent dates (within last 30 days)
 const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
 const tenDaysAgoEnd = new Date(tenDaysAgo.getTime() + 6 * 24 * 60 * 60 * 1000);
 const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
 const fiveDaysAgoEnd = new Date(fiveDaysAgo.getTime() + 6 * 24 * 60 * 60 * 1000);
+const futureDueDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days in future
 const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
 const twoDaysAgoEnd = new Date(twoDaysAgo.getTime() + 6 * 24 * 60 * 60 * 1000);
 
@@ -41,7 +47,7 @@ const mockInvoices = [
     status: 'sent',
     weekStart: formatDate(fiveDaysAgo),
     weekEnd: formatDate(fiveDaysAgoEnd),
-    dueDate: formatDate(fiveDaysAgoEnd),
+    dueDate: formatDate(futureDueDate), // Future date to avoid overdue status
     totalHours: 35,
     totalPay: 980.00
   },
@@ -307,20 +313,21 @@ describe('ListView', () => {
     }
   });
 
-  it('maintains selections when filtering', () => {
+  it('clears selections when filtered items are hidden', () => {
     render(<ListView invoices={mockInvoices} config={mockConfig} />);
 
-    // Select first invoice
+    // Select first invoice (INV-001, draft)
     const checkboxes = screen.getAllByRole('checkbox');
     fireEvent.click(checkboxes[1]);
 
-    expect(screen.getByText(/1 invoice selected/)).toBeInTheDocument();
+    // Should show selection count in the summary line
+    expect(screen.getByText(/1 selected/)).toBeInTheDocument();
 
-    // Apply a filter
+    // Apply a filter for "sent" status (which will hide the selected draft invoice)
     const statusFilter = screen.getByLabelText('Status');
     fireEvent.change(statusFilter, { target: { value: 'sent' } });
 
-    // Selection count should still show (even if filtered item is hidden)
-    expect(screen.getByText(/1 invoice selected/)).toBeInTheDocument();
+    // Selection should be cleared since the filtered item is no longer visible
+    expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
   });
 });

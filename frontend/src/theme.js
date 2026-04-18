@@ -108,20 +108,20 @@ const theme = {
      * @param {number} alpha - Opacity from 0 to 1
      * @returns {string} rgba color string
      */
-    primaryWithOpacity: (alpha) => `rgba(${theme.colors.primaryRgb}, ${alpha})`,
+    primaryWithOpacity: (alpha) => `rgba(183, 110, 121, ${alpha})`,
   },
 
   // Common gradients
   gradients: {
     primaryButton: (primaryColor) =>
-      `linear-gradient(135deg, ${primaryColor}, rgba(${theme.colors.primaryRgb}, 0.85))`,
-    ctaBackground: `linear-gradient(135deg, rgba(${theme.colors.primaryRgb}, 0.12), rgba(${theme.colors.primaryRgb}, 0.24))`,
+      `linear-gradient(135deg, ${primaryColor}, rgba(183, 110, 121, 0.85))`,
+    ctaBackground: `linear-gradient(135deg, rgba(183, 110, 121, 0.12), rgba(183, 110, 121, 0.24))`,
   },
 
   // Common shadows
   shadows: {
-    primary: `0 6px 24px rgba(${theme.colors.primaryRgb}, 0.3)`,
-    primaryHover: `0 10px 32px rgba(${theme.colors.primaryRgb}, 0.4)`,
+    primary: `0 6px 24px rgba(183, 110, 121, 0.3)`,
+    primaryHover: `0 10px 32px rgba(183, 110, 121, 0.4)`,
   },
 };
 

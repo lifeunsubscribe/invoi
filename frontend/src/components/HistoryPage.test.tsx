@@ -127,13 +127,13 @@ describe('HistoryPage', () => {
 
     render(<HistoryPage config={mockConfig} onBack={vi.fn()} />)
 
-    // Wait for invoices to load
+    // Wait for invoices to load (ListView shows "Showing X of Y invoices")
     await waitFor(() => {
-      expect(screen.getByText(/Found 2 invoices/i)).toBeInTheDocument()
+      expect(screen.getByText(/Showing 2 of 2 invoice/i)).toBeInTheDocument()
     })
 
-    expect(screen.getByText(/List View/i)).toBeInTheDocument()
-    expect(screen.getByText(/View implementation coming soon/i)).toBeInTheDocument()
+    expect(screen.getByText('INV-001')).toBeInTheDocument()
+    expect(screen.getByText('INV-002')).toBeInTheDocument()
   })
 
   it('renders CalendarView when calendar view is active with invoices', async () => {
