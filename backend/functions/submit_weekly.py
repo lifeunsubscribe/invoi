@@ -196,12 +196,21 @@ def handler(event, context):
                     })
                 }
 
-        # Generate preview invoice number for PDF generation (before atomic increment)
-        # Note: This is a preview only - the actual number will be confirmed after transaction succeeds
-        preview_invoice_number = format_invoice_number(user_config, 'weekly')
+        # Atomically increment invoice counter BEFORE PDF generation
+        # This prevents race conditions where concurrent requests could generate PDFs
+        # with the same number but different database numbers
+        next_counter_value = _increment_invoice_counter(user_id)
 
-        # Generate invoice PDF FIRST, before creating database records
-        # This ensures PDF generation failures don't consume invoice numbers
+        # Update user_config with the new counter value for invoice number formatting
+        user_config['invoiceNumberConfig']['nextNum'] = next_counter_value
+
+        # Generate the invoice number using the atomically-incremented counter
+        # This is the FINAL number that will be used in both PDF and database
+        invoice_number = format_invoice_number(user_config, 'weekly')
+
+        # Generate invoice PDF with the final invoice number
+        # Note: If PDF generation fails, the counter is already incremented (creates a gap),
+        # but this is preferable to race conditions causing mismatched numbers
         template_id = user_config.get('template', 'morning-light')
         signature_font = user_config.get('signatureFont', '')
         invoice_date = datetime.now()
@@ -225,11 +234,12 @@ def handler(event, context):
                 signature_font=signature_font,
                 sign_date=invoice_date.strftime('%Y-%m-%d'),
                 invoice_date=invoice_date,
-                invoice_number=preview_invoice_number,
+                invoice_number=invoice_number,
                 logo_data=logo_data
             )
         except Exception as e:
             logger.error(f"PDF generation failed: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but PDF generation failed for user {user_id}")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -238,26 +248,43 @@ def handler(event, context):
 
         # Validate PDF generation succeeded
         if not pdf_bytes:
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but PDF generation returned empty result for user {user_id}")
             return {
                 'statusCode': 500,
                 'headers': headers,
                 'body': json.dumps({'error': 'PDF generation returned empty result'})
             }
 
-        # Now atomically increment invoice number and create invoice record
-        # This uses DynamoDB TransactWriteItems to guarantee no duplicate invoice numbers
-        # Since PDF is already generated, we know the operation can succeed end-to-end
-        invoice_number, invoice_metadata = _create_invoice_with_atomic_increment(
-            user_id=user_id,
-            user_config=user_config,
-            hours=hours,
-            week=week,
-            active_client=active_client,
-            client_email=client_email,
-            accountant_email=accountant_email,
-            save_only=save_only,
-            invoice_number=preview_invoice_number
-        )
+        # Create invoice database record
+        # Note: Invoice number was already atomically incremented above, so this just creates the record
+        try:
+            invoice_metadata = _create_invoice_record(
+                user_id=user_id,
+                user_config=user_config,
+                hours=hours,
+                week=week,
+                active_client=active_client,
+                client_email=client_email,
+                accountant_email=accountant_email,
+                save_only=save_only,
+                invoice_number=invoice_number
+            )
+        except ValueError as e:
+            logger.error(f"Failed to create invoice record: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but invoice record creation failed for user {user_id}")
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'error': str(e)})
+            }
+        except ClientError as e:
+            logger.error(f"Failed to create invoice record: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but invoice record creation failed for user {user_id}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Failed to create invoice record'})
+            }
 
         # Upload PDF to S3 at users/{userId}/weekly/{invoiceId}.pdf
         bucket_name = os.environ['SST_Resource_InvoiStorage_name']
@@ -268,6 +295,7 @@ def handler(event, context):
             save_pdf_to_s3(pdf_bytes, bucket_name, s3_key)
         except Exception as e:
             logger.error(f"S3 upload failed: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but S3 upload failed for user {user_id}")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -289,6 +317,7 @@ def handler(event, context):
             invoices_table.put_item(Item=invoice_metadata)
         except ClientError as e:
             logger.error(f"Failed to update invoice metadata with pdfKey: {str(e)}")
+            logger.warning(f"Invoice number gap created: invoice number {invoice_number} was allocated but metadata update failed for user {user_id}")
             return {
                 'statusCode': 500,
                 'headers': headers,
@@ -423,13 +452,60 @@ def handler(event, context):
         }
 
 
-def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, active_client,
-                                         client_email, accountant_email, save_only, invoice_number):
+def _increment_invoice_counter(user_id):
     """
-    Atomically increment invoice number in user config and create invoice record.
+    Atomically increment the invoice counter and return the new value.
 
-    Uses DynamoDB TransactWriteItems to guarantee no duplicate invoice numbers
-    even under concurrent requests.
+    This must happen BEFORE PDF generation to eliminate race conditions where
+    concurrent requests could read the same counter value and generate PDFs with
+    the same preview number but different final database numbers.
+
+    Args:
+        user_id: str - User ID
+
+    Returns:
+        int - The newly incremented counter value
+
+    Raises:
+        ClientError - If DynamoDB operation fails
+        ValueError - If user not found or counter config missing
+    """
+    dynamodb_client = boto3.client('dynamodb')
+    users_table = os.environ['USERS_TABLE']
+
+    try:
+        # Atomically increment counter and return the new value
+        response = dynamodb_client.update_item(
+            TableName=users_table,
+            Key={'userId': {'S': user_id}},
+            UpdateExpression='SET invoiceNumberConfig.nextNum = invoiceNumberConfig.nextNum + :inc',
+            ExpressionAttributeValues={':inc': {'N': '1'}},
+            ConditionExpression='attribute_exists(userId) AND attribute_exists(invoiceNumberConfig.nextNum)',
+            ReturnValues='ALL_NEW'
+        )
+
+        # Extract the new counter value from the response
+        updated_config = response['Attributes']['invoiceNumberConfig']['M']
+        next_num = int(updated_config['nextNum']['N'])
+
+        return next_num
+
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code', '')
+        if error_code == 'ConditionalCheckFailedException':
+            logger.error(f"User {user_id} not found or missing invoice counter configuration")
+            raise ValueError('User configuration error: invoice counter not initialized')
+        logger.error(f"Failed to increment invoice counter for user {user_id}: {str(e)}")
+        raise
+
+
+def _create_invoice_record(user_id, user_config, hours, week, active_client,
+                           client_email, accountant_email, save_only, invoice_number):
+    """
+    Create invoice record in DynamoDB.
+
+    Note: Invoice counter is already incremented before this function is called.
+    This function only creates the invoice record.
 
     Args:
         user_id: str - User ID
@@ -440,13 +516,11 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
         client_email: str - Client email address
         accountant_email: str - Accountant email address
         save_only: bool - Whether to save as draft only
-        invoice_number: str - Pre-generated invoice number (from preview)
+        invoice_number: str - Final invoice number (already incremented)
 
     Returns:
-        tuple: (invoice_number: str, invoice_metadata: dict)
+        dict - Invoice metadata
     """
-    # Use the pre-generated invoice number passed from caller
-    # This avoids regenerating the number which would cause gaps if the transaction fails
 
     # Calculate totals
     total_hours = sum(float(hours.get(day, 0)) for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
@@ -497,49 +571,30 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
         'createdAt': datetime.now().isoformat()
     }
 
-    # Perform atomic transaction: increment counter + create invoice
-    # Using boto3 client (not resource) for TransactWriteItems
-    dynamodb_client = boto3.client('dynamodb')
-    users_table = os.environ['USERS_TABLE']
+    # Create invoice record in DynamoDB
+    # Note: Counter is already incremented, so no atomic transaction needed
     invoices_table = os.environ['INVOICES_TABLE']
 
     try:
-        # Convert invoice_metadata to DynamoDB format
-        from boto3.dynamodb.types import TypeSerializer
-        serializer = TypeSerializer()
-        invoice_item_dynamodb = {k: serializer.serialize(v) for k, v in invoice_metadata.items()}
+        # Use DynamoDB resource for simpler put_item operation
+        dynamodb_resource = boto3.resource('dynamodb')
+        table = dynamodb_resource.Table(invoices_table)
 
-        # Execute atomic transaction
-        dynamodb_client.transact_write_items(
-            TransactItems=[
-                {
-                    'Update': {
-                        'TableName': users_table,
-                        'Key': {'userId': {'S': user_id}},
-                        'UpdateExpression': 'SET invoiceNumberConfig.nextNum = invoiceNumberConfig.nextNum + :inc',
-                        'ExpressionAttributeValues': {':inc': {'N': '1'}},
-                        'ConditionExpression': 'attribute_exists(userId)'
-                    }
-                },
-                {
-                    'Put': {
-                        'TableName': invoices_table,
-                        'Item': invoice_item_dynamodb,
-                        'ConditionExpression': 'attribute_not_exists(invoiceId)'
-                    }
-                }
-            ]
+        # Put item with condition to prevent duplicates
+        table.put_item(
+            Item=invoice_metadata,
+            ConditionExpression='attribute_not_exists(invoiceId)'
         )
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', '')
-        if error_code == 'TransactionCanceledException':
-            # Transaction failed - likely duplicate invoiceId or user not found
-            cancellation_reasons = e.response.get('CancellationReasons', [])
-            logger.error(f"Transaction cancelled: {cancellation_reasons}")
-            raise ValueError('Invoice already exists or user configuration error')
+        if error_code == 'ConditionalCheckFailedException':
+            # Invoice ID already exists
+            logger.error(f"Invoice {invoice_metadata['invoiceId']} already exists")
+            raise ValueError('Invoice already exists')
+        logger.error(f"Failed to create invoice record: {str(e)}")
         raise
 
-    return invoice_number, invoice_metadata
+    return invoice_metadata
 
 
 def _populate_hours_from_default_shift(default_shift):

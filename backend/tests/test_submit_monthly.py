@@ -64,9 +64,8 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
-            'USERS_TABLE': 'users-table',
-            'INVOICES_TABLE': 'invoices-table',
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'invoices-table'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
                 with patch('functions.submit_monthly.get_invoice', return_value=None):
@@ -135,9 +134,8 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
-            'USERS_TABLE': 'users-table',
-            'INVOICES_TABLE': 'invoices-table',
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'invoices-table'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
                 with patch('functions.submit_monthly.get_invoice', return_value=None):
@@ -212,15 +210,10 @@ class TestSubmitMonthly:
         # Mock empty weekly invoices
         mock_weekly_invoices = []
 
-        with patch.dict(os.environ, {
-            'USERS_TABLE': 'users-table',
-            'INVOICES_TABLE': 'invoices-table',
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
-        }):
-            with patch('functions.submit_monthly.get_user', return_value=mock_user):
-                with patch('functions.submit_monthly.get_invoice', return_value=None):
-                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                        response = handler(event, {})
+        with patch('functions.submit_monthly.get_user', return_value=mock_user):
+            with patch('functions.submit_monthly.get_invoice', return_value=None):
+                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                    response = handler(event, {})
 
         assert response['statusCode'] == 400
         body = json.loads(response['body'])
@@ -269,9 +262,8 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
-            'USERS_TABLE': 'users-table',
-            'INVOICES_TABLE': 'invoices-table',
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'invoices-table'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
                 with patch('functions.submit_monthly.get_invoice', return_value=None):
@@ -418,9 +410,8 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
-            'USERS_TABLE': 'users-table',
-            'INVOICES_TABLE': 'invoices-table',
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'invoices-table'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
                 with patch('functions.submit_monthly.get_invoice', return_value=corrupted_report):
@@ -492,9 +483,8 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
-            'USERS_TABLE': 'users-table',
-            'INVOICES_TABLE': 'invoices-table',
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'invoices-table'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
                 with patch('functions.submit_monthly.get_invoice', return_value=None):
