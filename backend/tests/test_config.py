@@ -376,7 +376,7 @@ class TestValidation:
             'name': 'Test User',
             'email': 'test@example.com',
             'rate': 25.0,
-            'personalEmail': 'a' * 255 + '@example.com'
+            'personalEmail': 'a' * 243 + '@example.com'  # 255 total chars
         }
         error = validate_profile_fields(data)
         assert error is not None
