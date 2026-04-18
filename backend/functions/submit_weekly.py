@@ -3,9 +3,8 @@ import logging
 import sys
 import os
 from datetime import datetime
-import base64
-import boto3
 from decimal import Decimal
+import boto3
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -14,16 +13,12 @@ from services.db_service import get_user
 from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
 from services.mail_service import send_weekly_email
 from services.logging_config import setup_logging
+from services.s3_service import fetch_logo_from_s3
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# S3 client for logo fetching
-s3_client = boto3.client('s3')
-# SST Ion provides bucket name via SST_Resource_<name>_name when linked
-BUCKET_NAME = os.environ.get('SST_Resource_InvoiStorage_name')
 
 # Re-export for test imports
 __all__ = ['handler', '_calculate_due_date', '_populate_hours_from_default_shift']
@@ -220,7 +215,7 @@ def handler(event, context):
         logo_key = user_config.get('logoKey')
         if logo_key:
             try:
-                logo_data = _fetch_logo_from_s3(logo_key)
+                logo_data = fetch_logo_from_s3(logo_key)
             except Exception as e:
                 # Log error but don't fail - invoice can be generated without logo
                 logger.warning(f"Failed to fetch logo from S3: {str(e)}")
@@ -328,7 +323,7 @@ def handler(event, context):
 
         # Return success response matching frontend expectations
         # Frontend expects: {saved: path, sent: [], invoiceNumber, s3Key}
-        # Convert Decimal values back to float for JSON serialization
+        # Convert Decimal to float for JSON serialization
         response_data = {
             'saved': s3_key,
             'invoiceNumber': invoice_number,
@@ -507,18 +502,19 @@ def _create_invoice_record(user_id, user_config, hours, week, active_client,
     """
 
     # Calculate totals
-    total_hours = sum(float(hours.get(day, 0)) for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
+    # Use Decimal for DynamoDB compatibility
+    total_hours = sum(Decimal(str(hours.get(day, 0))) for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
 
-    rate = float(user_config.get('rate', 0))
+    rate = Decimal(str(user_config.get('rate', 0)))
     subtotal = total_hours * rate
 
     # Calculate tax if enabled
     tax_enabled = user_config.get('taxEnabled', False)
-    tax_rate = float(user_config.get('taxRate', 0))
-    tax_amount = 0.0
+    tax_rate = Decimal(str(user_config.get('taxRate', 0)))
+    tax_amount = Decimal('0')
 
     if tax_enabled:
-        tax_amount = subtotal * (tax_rate / 100.0)
+        tax_amount = subtotal * (tax_rate / Decimal('100'))
 
     total_pay = subtotal + tax_amount
 
@@ -531,6 +527,9 @@ def _create_invoice_record(user_id, user_config, hours, week, active_client,
     # Convert all numeric values to Decimal for DynamoDB compatibility
     # This includes the hours dict which may contain float values from calculations
     invoice_id = week['invNum']
+    # Convert dailyHours to Decimal for DynamoDB compatibility
+    daily_hours_decimal = {day: Decimal(str(val)) for day, val in hours.items()}
+
     invoice_metadata = {
         'userId': user_id,
         'invoiceId': invoice_id,
@@ -542,13 +541,13 @@ def _create_invoice_record(user_id, user_config, hours, week, active_client,
         'weekEnd': week['end'],
         'dueDate': due_date,
         'paymentTerms': payment_terms,
-        'dailyHours': {day: Decimal(str(hour)) for day, hour in hours.items()},
-        'totalHours': Decimal(str(total_hours)),
-        'rate': Decimal(str(rate)),
-        'subtotal': Decimal(str(subtotal)),
-        'taxRate': Decimal(str(tax_rate)),
-        'taxAmount': Decimal(str(tax_amount)),
-        'totalPay': Decimal(str(total_pay)),
+        'dailyHours': daily_hours_decimal,
+        'totalHours': total_hours,
+        'rate': rate,
+        'subtotal': subtotal,
+        'taxRate': tax_rate,
+        'taxAmount': tax_amount,
+        'totalPay': total_pay,
         'template': user_config.get('template', 'morning-light'),
         'sentAt': None,  # Will be set in Phase 3 when email is sent
         'sentTo': [],
@@ -572,18 +571,11 @@ def _create_invoice_record(user_id, user_config, hours, week, active_client,
         )
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', '')
-<<<<<<< Updated upstream
         if error_code == 'ConditionalCheckFailedException':
             # Invoice ID already exists
             logger.error(f"Invoice {invoice_metadata['invoiceId']} already exists")
             raise ValueError('Invoice already exists')
         logger.error(f"Failed to create invoice record: {str(e)}")
-=======
-        if error_code == 'TransactionCanceledException':
-            # Transaction failed - likely duplicate invoiceId or user not found
-            cancellation_reasons = e.response.get('CancellationReasons', [])
-            logger.error(f"Transaction cancelled: {cancellation_reasons}")
->>>>>>> Stashed changes
         raise
 
     return invoice_metadata
@@ -685,35 +677,3 @@ def _extract_user_id_from_token(event):
         pass
 
     return None
-
-
-def _fetch_logo_from_s3(logo_key):
-    """
-    Fetch logo image from S3 and return as base64-encoded data URL.
-
-    Args:
-        logo_key: str - S3 key for logo (e.g., users/{userId}/logo.png)
-
-    Returns:
-        str - Base64-encoded data URL (e.g., data:image/png;base64,...)
-        None - If logo cannot be fetched
-
-    Raises:
-        ClientError - If S3 operation fails
-    """
-    try:
-        # Fetch logo from S3
-        response = s3_client.get_object(Bucket=BUCKET_NAME, Key=logo_key)
-        logo_bytes = response['Body'].read()
-        content_type = response.get('ContentType', 'application/octet-stream')
-
-        # Encode as base64 data URL
-        base64_data = base64.b64encode(logo_bytes).decode('utf-8')
-        data_url = f"data:{content_type};base64,{base64_data}"
-
-        return data_url
-
-    except ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-        logger.warning(f"Failed to fetch logo from S3 (key: {logo_key}): {error_code}")
-        raise

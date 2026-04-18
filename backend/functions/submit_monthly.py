@@ -3,10 +3,9 @@ import logging
 import sys
 import os
 from datetime import datetime
-import calendar
-import base64
-import boto3
 from decimal import Decimal
+import calendar
+import boto3
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -15,16 +14,12 @@ from services.db_service import query_invoices, get_user, get_invoice
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from services.logging_config import setup_logging
+from services.s3_service import fetch_logo_from_s3
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# S3 client for logo fetching
-s3_client = boto3.client('s3')
-# SST Ion provides bucket name via SST_Resource_<name>_name when linked
-BUCKET_NAME = os.environ.get('SST_Resource_InvoiStorage_name')
 
 
 def handler(event, context):
@@ -156,6 +151,7 @@ def handler(event, context):
             if has_complete_data:
                 # Report already exists with complete data - return existing data (idempotent behavior)
                 logger.info(f"Report {report_id} already exists for user {user_id}. Returning existing report.")
+                # Convert Decimal to float for JSON serialization
                 return {
                     'statusCode': 200,
                     'headers': headers,
@@ -163,8 +159,8 @@ def handler(event, context):
                         'reportId': existing_report.get('invoiceId'),
                         's3Key': existing_report.get('pdfKey'),
                         'monthLabel': existing_report.get('monthLabel'),
-                        'totalHours': existing_report.get('totalHours'),
-                        'totalPay': existing_report.get('totalPay'),
+                        'totalHours': float(existing_report.get('totalHours', 0)),
+                        'totalPay': float(existing_report.get('totalPay', 0)),
                         'weekCount': existing_report.get('weekCount'),
                         'status': existing_report.get('status'),
                         'createdAt': existing_report.get('createdAt'),
@@ -222,7 +218,7 @@ def handler(event, context):
         logo_key = user_config.get('logoKey')
         if logo_key:
             try:
-                logo_data = _fetch_logo_from_s3(logo_key)
+                logo_data = fetch_logo_from_s3(logo_key)
             except Exception as e:
                 # Log error but don't fail - report can be generated without logo
                 logger.warning(f"Failed to fetch logo from S3: {str(e)}")
@@ -257,11 +253,12 @@ def handler(event, context):
         save_pdf_to_s3(pdf_bytes, bucket_name, s3_key)
 
         # Calculate totals for metadata
-        total_hours = sum(w['hours'] for w in week_data)
+        # Use Decimal for DynamoDB compatibility
+        total_hours = sum(Decimal(str(w['hours'])) for w in week_data)
 
-        # Safely coerce rate to float with validation
+        # Safely coerce rate to Decimal with validation
         try:
-            rate = float(user_config.get('rate', 0))
+            rate = Decimal(str(user_config.get('rate', 0)))
             if rate < 0:
                 return {
                     'statusCode': 500,
@@ -310,13 +307,13 @@ def handler(event, context):
             }
 
         # Prepare response data
-        # Convert Decimal values back to float for JSON serialization
+        # Convert Decimal to float for JSON serialization
         response_data = {
             'reportId': report_id,
             's3Key': s3_key,
             'monthLabel': month_label,
-            'totalHours': float(report_metadata['totalHours']),
-            'totalPay': float(report_metadata['totalPay']),
+            'totalHours': float(total_hours),
+            'totalPay': float(total_pay),
             'weekCount': len(week_data),
             'status': report_metadata['status'],
             'createdAt': report_metadata['createdAt']
@@ -434,35 +431,3 @@ def _extract_user_id_from_token(event):
         pass
 
     return None
-
-
-def _fetch_logo_from_s3(logo_key):
-    """
-    Fetch logo image from S3 and return as base64-encoded data URL.
-
-    Args:
-        logo_key: str - S3 key for logo (e.g., users/{userId}/logo.png)
-
-    Returns:
-        str - Base64-encoded data URL (e.g., data:image/png;base64,...)
-        None - If logo cannot be fetched
-
-    Raises:
-        ClientError - If S3 operation fails
-    """
-    try:
-        # Fetch logo from S3
-        response = s3_client.get_object(Bucket=BUCKET_NAME, Key=logo_key)
-        logo_bytes = response['Body'].read()
-        content_type = response.get('ContentType', 'application/octet-stream')
-
-        # Encode as base64 data URL
-        base64_data = base64.b64encode(logo_bytes).decode('utf-8')
-        data_url = f"data:{content_type};base64,{base64_data}"
-
-        return data_url
-
-    except ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-        logger.warning(f"Failed to fetch logo from S3 (key: {logo_key}): {error_code}")
-        raise
