@@ -64,15 +64,21 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'test-invoices-table'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
-                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                    with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
-                        with patch('functions.submit_monthly.save_pdf_to_s3'):
-                            with patch('functions.submit_monthly.put_invoice') as mock_put_invoice:
-                                with patch('functions.submit_monthly.send_monthly_email') as mock_send_email:
-                                    response = handler(event, {})
+                with patch('functions.submit_monthly.get_invoice', return_value=None):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
+                            with patch('functions.submit_monthly.save_pdf_to_s3'):
+                                with patch('functions.submit_monthly.boto3.resource') as mock_boto_resource:
+                                    # Mock DynamoDB resource for put_item
+                                    mock_table = MagicMock()
+                                    mock_boto_resource.return_value.Table.return_value = mock_table
+
+                                    with patch('functions.submit_monthly.send_monthly_email') as mock_send_email:
+                                        response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -86,8 +92,8 @@ class TestSubmitMonthly:
         assert call_args[1]['to_addresses'] == ['accountant@example.com']
         assert call_args[1]['user_name'] == 'Test User'
 
-        # Verify put_invoice called twice (initial save + status update after send)
-        assert mock_put_invoice.call_count == 2
+        # Verify put_item called twice (initial save + status update after send)
+        assert mock_table.put_item.call_count == 2
 
     def test_submit_monthly_without_send(self):
         """POST with send=False should save as draft without sending email"""
@@ -132,15 +138,21 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'test-invoices-table'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
-                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                    with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
-                        with patch('functions.submit_monthly.save_pdf_to_s3'):
-                            with patch('functions.submit_monthly.put_invoice') as mock_put_invoice:
-                                with patch('functions.submit_monthly.send_monthly_email') as mock_send_email:
-                                    response = handler(event, {})
+                with patch('functions.submit_monthly.get_invoice', return_value=None):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
+                            with patch('functions.submit_monthly.save_pdf_to_s3'):
+                                with patch('functions.submit_monthly.boto3.resource') as mock_boto_resource:
+                                    # Mock DynamoDB resource for put_item
+                                    mock_table = MagicMock()
+                                    mock_boto_resource.return_value.Table.return_value = mock_table
+
+                                    with patch('functions.submit_monthly.send_monthly_email') as mock_send_email:
+                                        response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -207,8 +219,9 @@ class TestSubmitMonthly:
         mock_weekly_invoices = []
 
         with patch('functions.submit_monthly.get_user', return_value=mock_user):
-            with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                response = handler(event, {})
+            with patch('functions.submit_monthly.get_invoice', return_value=None):
+                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                    response = handler(event, {})
 
         assert response['statusCode'] == 400
         body = json.loads(response['body'])
@@ -257,15 +270,21 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'test-invoices-table'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
-                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                    with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
-                        with patch('functions.submit_monthly.save_pdf_to_s3'):
-                            with patch('functions.submit_monthly.put_invoice'):
-                                with patch('functions.submit_monthly.send_monthly_email', side_effect=Exception('SES error')):
-                                    response = handler(event, {})
+                with patch('functions.submit_monthly.get_invoice', return_value=None):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
+                            with patch('functions.submit_monthly.save_pdf_to_s3'):
+                                with patch('functions.submit_monthly.boto3.resource') as mock_boto_resource:
+                                    # Mock DynamoDB resource for put_item
+                                    mock_table = MagicMock()
+                                    mock_boto_resource.return_value.Table.return_value = mock_table
+
+                                    with patch('functions.submit_monthly.send_monthly_email', side_effect=Exception('SES error')):
+                                        response = handler(event, {})
 
         # Should return 200 with warning, not error
         assert response['statusCode'] == 200
@@ -403,14 +422,19 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'test-invoices-table'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
                 with patch('functions.submit_monthly.get_invoice', return_value=corrupted_report):
                     with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices) as mock_query:
                         with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes) as mock_generate:
                             with patch('functions.submit_monthly.save_pdf_to_s3') as mock_save_pdf:
-                                with patch('functions.submit_monthly.put_invoice') as mock_put_invoice:
+                                with patch('functions.submit_monthly.boto3.resource') as mock_boto_resource:
+                                    # Mock DynamoDB resource for put_item
+                                    mock_table = MagicMock()
+                                    mock_boto_resource.return_value.Table.return_value = mock_table
+
                                     response = handler(event, {})
 
         # Should return 200 with regenerated report data
@@ -430,7 +454,7 @@ class TestSubmitMonthly:
         mock_query.assert_called_once()
         mock_generate.assert_called_once()
         mock_save_pdf.assert_called_once()
-        mock_put_invoice.assert_called_once()
+        mock_table.put_item.assert_called_once()
 
     def test_lambda_response_has_no_cors_headers(self):
         """Lambda responses should not include CORS headers (API Gateway handles them)"""
@@ -475,14 +499,20 @@ class TestSubmitMonthly:
         mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
 
         with patch.dict(os.environ, {
-            'SST_Resource_InvoiStorage_name': 'test-bucket'
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'test-invoices-table'
         }):
             with patch('functions.submit_monthly.get_user', return_value=mock_user):
-                with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
-                    with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
-                        with patch('functions.submit_monthly.save_pdf_to_s3'):
-                            with patch('functions.submit_monthly.put_invoice'):
-                                response = handler(event, {})
+                with patch('functions.submit_monthly.get_invoice', return_value=None):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
+                            with patch('functions.submit_monthly.save_pdf_to_s3'):
+                                with patch('functions.submit_monthly.boto3.resource') as mock_boto_resource:
+                                    # Mock DynamoDB resource for put_item
+                                    mock_table = MagicMock()
+                                    mock_boto_resource.return_value.Table.return_value = mock_table
+
+                                    response = handler(event, {})
 
         assert response['statusCode'] == 200
         # Lambda should NOT set CORS headers - API Gateway handles them

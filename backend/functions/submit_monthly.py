@@ -6,11 +6,12 @@ from datetime import datetime
 import calendar
 import base64
 import boto3
+from decimal import Decimal
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from services.db_service import query_invoices, get_user, put_invoice, get_invoice
+from services.db_service import query_invoices, get_user, get_invoice
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from services.logging_config import setup_logging
@@ -277,6 +278,7 @@ def handler(event, context):
         total_pay = total_hours * rate
 
         # Save report metadata to Invoices table with type="monthly"
+        # Convert numeric values to Decimal for DynamoDB compatibility
         report_metadata = {
             'userId': user_id,
             'invoiceId': report_id,
@@ -286,24 +288,35 @@ def handler(event, context):
             'month': month_int,
             'monthLabel': month_label,
             'weekCount': len(week_data),
-            'totalHours': total_hours,
-            'rate': rate,
-            'totalPay': total_pay,
+            'totalHours': Decimal(str(total_hours)),
+            'rate': Decimal(str(rate)),
+            'totalPay': Decimal(str(total_pay)),
             'pdfKey': s3_key,
             'sentAt': None,
             'sentTo': [],
             'createdAt': datetime.now().isoformat()
         }
 
-        put_invoice(report_metadata)
+        # Save report metadata to DynamoDB using direct DynamoDB access
+        try:
+            invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
+            invoices_table.put_item(Item=report_metadata)
+        except ClientError as e:
+            logger.error(f"Failed to save report metadata: {str(e)}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Failed to save report metadata'})
+            }
 
         # Prepare response data
+        # Convert Decimal values back to float for JSON serialization
         response_data = {
             'reportId': report_id,
             's3Key': s3_key,
             'monthLabel': month_label,
-            'totalHours': total_hours,
-            'totalPay': total_pay,
+            'totalHours': float(report_metadata['totalHours']),
+            'totalPay': float(report_metadata['totalPay']),
             'weekCount': len(week_data),
             'status': report_metadata['status'],
             'createdAt': report_metadata['createdAt']
@@ -334,16 +347,25 @@ def handler(event, context):
                         from_email="noreply@goinvoi.com"
                     )
 
-                    # Update report status to 'sent' and record email metadata
-                    report_metadata['status'] = 'sent'
-                    report_metadata['sentAt'] = datetime.now().isoformat()
-                    report_metadata['sentTo'] = email_recipients
+                    # Persist updated status to DynamoDB first, before updating response
+                    # This ensures the response status matches the database state
+                    try:
+                        report_metadata['status'] = 'sent'
+                        report_metadata['sentAt'] = datetime.now().isoformat()
+                        report_metadata['sentTo'] = email_recipients
 
-                    # Persist updated status to DynamoDB
-                    put_invoice(report_metadata)
+                        invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
+                        invoices_table.put_item(Item=report_metadata)
 
-                    response_data['sent'] = email_recipients
-                    response_data['status'] = 'sent'
+                        # Only update response if database update succeeded
+                        response_data['sent'] = email_recipients
+                        response_data['status'] = 'sent'
+                    except ClientError as e:
+                        logger.error(f"Failed to update report status after email send: {str(e)}")
+                        # Email was sent but status update failed
+                        # Keep status as 'draft' to match database state
+                        response_data['sent'] = []
+                        response_data['emailWarning'] = f"Email sent to {', '.join(email_recipients)} but status update failed. Report remains in draft status."
 
                 except Exception as e:
                     # Email failed but report was saved successfully

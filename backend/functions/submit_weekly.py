@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 import base64
 import boto3
+from decimal import Decimal
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -298,13 +299,14 @@ def handler(event, context):
 
         # Return success response matching frontend expectations
         # Frontend expects: {saved: path, sent: [], invoiceNumber, s3Key}
+        # Convert Decimal values back to float for JSON serialization
         response_data = {
             'saved': s3_key,
             'invoiceNumber': invoice_number,
             'invoiceId': invoice_id,
             's3Key': s3_key,
-            'totalHours': invoice_metadata['totalHours'],
-            'totalPay': invoice_metadata['totalPay'],
+            'totalHours': float(invoice_metadata['totalHours']),
+            'totalPay': float(invoice_metadata['totalPay']),
             'status': invoice_metadata['status'],
             'createdAt': invoice_metadata['createdAt'],
             'sent': []  # Initialize sent field - will be populated if email is sent
@@ -438,11 +440,11 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
 
     # Calculate tax if enabled
     tax_enabled = user_config.get('taxEnabled', False)
-    tax_rate = user_config.get('taxRate', 0)
-    tax_amount = 0
+    tax_rate = float(user_config.get('taxRate', 0))
+    tax_amount = 0.0
 
     if tax_enabled:
-        tax_amount = subtotal * (tax_rate / 100)
+        tax_amount = subtotal * (tax_rate / 100.0)
 
     total_pay = subtotal + tax_amount
 
@@ -452,6 +454,8 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
     due_date = _calculate_due_date(invoice_date, payment_terms)
 
     # Create invoice metadata
+    # Convert all numeric values to Decimal for DynamoDB compatibility
+    # This includes the hours dict which may contain float values from calculations
     invoice_id = week['invNum']
     invoice_metadata = {
         'userId': user_id,
@@ -464,13 +468,13 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
         'weekEnd': week['end'],
         'dueDate': due_date,
         'paymentTerms': payment_terms,
-        'dailyHours': hours,
-        'totalHours': total_hours,
-        'rate': rate,
-        'subtotal': subtotal,
-        'taxRate': tax_rate,
-        'taxAmount': tax_amount,
-        'totalPay': total_pay,
+        'dailyHours': {day: Decimal(str(hour)) for day, hour in hours.items()},
+        'totalHours': Decimal(str(total_hours)),
+        'rate': Decimal(str(rate)),
+        'subtotal': Decimal(str(subtotal)),
+        'taxRate': Decimal(str(tax_rate)),
+        'taxAmount': Decimal(str(tax_amount)),
+        'totalPay': Decimal(str(total_pay)),
         'template': user_config.get('template', 'morning-light'),
         'sentAt': None,  # Will be set in Phase 3 when email is sent
         'sentTo': [],
@@ -517,7 +521,8 @@ def _create_invoice_with_atomic_increment(user_id, user_config, hours, week, act
             # Transaction failed - likely duplicate invoiceId or user not found
             cancellation_reasons = e.response.get('CancellationReasons', [])
             logger.error(f"Transaction cancelled: {cancellation_reasons}")
-            raise ValueError('Invoice already exists or user configuration error')
+            # Re-raise as ClientError to ensure it's handled as 500, not 400
+            raise
         raise
 
     return invoice_number, invoice_metadata
