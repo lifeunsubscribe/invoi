@@ -36,19 +36,9 @@ from backend.themes import (
     THEME_ORDER,
     get_theme,
 )
+from backend.services.s3_service import get_s3_client
 
 logger = logging.getLogger(__name__)
-
-# S3 client for PDF storage (initialized on first use)
-_s3_client = None
-
-
-def _get_s3_client():
-    """Lazy-initialize S3 client."""
-    global _s3_client
-    if _s3_client is None:
-        _s3_client = boto3.client('s3')
-    return _s3_client
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
 
@@ -294,7 +284,7 @@ def save_pdf_to_s3(pdf_bytes, bucket_name, key):
         )
     """
     logger.info(f"Uploading PDF to S3: bucket={bucket_name} key={key} size={len(pdf_bytes)} bytes")
-    s3 = _get_s3_client()
+    s3 = get_s3_client()
 
     try:
         s3.put_object(

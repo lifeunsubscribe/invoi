@@ -6,10 +6,12 @@ Provides shared S3 operations for the Invoi backend.
 Main Functions:
     fetch_logo_from_s3(logo_key, bucket_name) -> str
         Fetches logo image from S3 and returns as base64-encoded data URL.
+    get_s3_client() -> boto3.client
+        Get or create shared S3 client instance.
+    get_bucket_name() -> str
+        Get S3 bucket name from environment configuration.
 
 Helpers:
-    _get_s3_client() -> boto3.client
-        Lazy-initialize S3 client.
     _reset_s3_client() -> None
         Reset S3 client for test isolation.
 """
@@ -27,11 +29,45 @@ _s3_client = None
 
 
 def _get_s3_client():
-    """Lazy-initialize S3 client."""
+    """Lazy-initialize S3 client (internal helper)."""
     global _s3_client
     if _s3_client is None:
         _s3_client = boto3.client('s3')
     return _s3_client
+
+
+def get_s3_client():
+    """
+    Get or create shared S3 client instance.
+
+    Returns:
+        boto3.client - Configured S3 client
+
+    Note:
+        Uses lazy initialization - client is created on first call and reused.
+        This is the recommended way to get an S3 client across all backend code.
+    """
+    return _get_s3_client()
+
+
+def get_bucket_name():
+    """
+    Get S3 bucket name from environment configuration.
+
+    Returns:
+        str - S3 bucket name from SST_Resource_InvoiStorage_name environment variable
+
+    Raises:
+        ValueError - If bucket name environment variable is not set
+
+    Note:
+        SST Ion provides the bucket name via SST_Resource_<name>_name when linked.
+        This is the recommended way to get the bucket name across all backend code.
+    """
+    bucket_name = os.environ.get('SST_Resource_InvoiStorage_name')
+    if not bucket_name:
+        raise ValueError("SST_Resource_InvoiStorage_name environment variable must be set")
+    return bucket_name
 
 
 def _reset_s3_client():

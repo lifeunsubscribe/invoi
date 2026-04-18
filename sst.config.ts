@@ -288,7 +288,7 @@ export default $config({
     if ($app.stage === "dev") {
       const testSesSecret = new sst.Secret("TestSesSecret");
       api.route("GET /api/test-ses", {
-        handler: "backend/functions/test_ses.handler",
+        handler: "backend/functions/ses_test_handler.handler",
         timeout: "10 seconds",
         memory: "256 MB",
         link: [testSesSecret],

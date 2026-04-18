@@ -10,13 +10,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_invoice
 from services.logging_config import setup_logging
+from services.s3_service import get_s3_client
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# Initialize S3 client
-s3_client = boto3.client('s3')
 
 
 def handler(event, context):
@@ -124,6 +122,7 @@ def handler(event, context):
 
         # Generate signed S3 URL with 15-minute expiration
         try:
+            s3_client = get_s3_client()
             signed_url = s3_client.generate_presigned_url(
                 'get_object',
                 Params={

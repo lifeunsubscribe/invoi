@@ -14,7 +14,7 @@ from services.db_service import query_invoices, get_user, put_invoice, get_invoi
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from services.logging_config import setup_logging
-from services.s3_service import fetch_logo_from_s3
+from services.s3_service import fetch_logo_from_s3, get_bucket_name
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
@@ -248,8 +248,8 @@ def handler(event, context):
             }
 
         # Upload PDF to S3 at users/{userId}/reports/RPT-{year}-{month}.pdf
-        # SST Ion provides bucket name via SST_Resource_<name>_name when linked
-        bucket_name = os.environ['SST_Resource_InvoiStorage_name']
+        # Get bucket name from centralized S3 service
+        bucket_name = get_bucket_name()
         # Note: report_id already defined above during idempotency check
         s3_key = f"users/{user_id}/reports/{report_id}.pdf"
 

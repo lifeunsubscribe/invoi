@@ -13,7 +13,7 @@ from services.db_service import get_user, put_invoice
 from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
 from services.mail_service import send_weekly_email
 from services.logging_config import setup_logging
-from services.s3_service import fetch_logo_from_s3
+from services.s3_service import fetch_logo_from_s3, get_bucket_name
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
@@ -285,7 +285,7 @@ def handler(event, context):
             }
 
         # Upload PDF to S3 at users/{userId}/weekly/{invoiceId}.pdf
-        bucket_name = os.environ['SST_Resource_InvoiStorage_name']
+        bucket_name = get_bucket_name()
         invoice_id = week['invNum']
         s3_key = f"users/{user_id}/weekly/{invoice_id}.pdf"
 

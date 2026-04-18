@@ -15,13 +15,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_invoice
 from services.logging_config import setup_logging
+from services.s3_service import get_s3_client, get_bucket_name
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# Initialize AWS clients
-s3_client = boto3.client('s3')
 
 
 def handler(event, context):
@@ -194,15 +192,9 @@ def _handle_csv_export(user_id, invoices, headers):
         csv_content = csv_buffer.getvalue().encode('utf-8')
         csv_buffer.close()
 
-        # Upload to S3
-        bucket_name = os.environ.get('InvoiStorage')
-        if not bucket_name:
-            logger.error("InvoiStorage bucket name not found in environment")
-            return {
-                'statusCode': 500,
-                'headers': headers,
-                'body': json.dumps({'error': 'Storage configuration error'})
-            }
+        # Get S3 client and bucket name
+        s3_client = get_s3_client()
+        bucket_name = get_bucket_name()
 
         # Generate unique filename with timestamp
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
@@ -238,6 +230,13 @@ def _handle_csv_export(user_id, invoices, headers):
             })
         }
 
+    except ValueError as e:
+        logger.error(f"Configuration error in CSV export: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': 'Storage configuration error'})
+        }
     except ClientError as e:
         logger.error(f"S3 error in CSV export: {str(e)}")
         return {
@@ -265,14 +264,9 @@ def _handle_zip_export(user_id, invoices, headers):
     with progress tokens to avoid Lambda timeout.
     """
     try:
-        bucket_name = os.environ.get('InvoiStorage')
-        if not bucket_name:
-            logger.error("InvoiStorage bucket name not found in environment")
-            return {
-                'statusCode': 500,
-                'headers': headers,
-                'body': json.dumps({'error': 'Storage configuration error'})
-            }
+        # Get S3 client and bucket name
+        s3_client = get_s3_client()
+        bucket_name = get_bucket_name()
 
         # Create ZIP in memory (avoids Lambda /tmp filesystem quota)
         zip_buffer = io.BytesIO()
@@ -374,6 +368,13 @@ def _handle_zip_export(user_id, invoices, headers):
             'body': json.dumps(response_body)
         }
 
+    except ValueError as e:
+        logger.error(f"Configuration error in ZIP export: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({'error': 'Storage configuration error'})
+        }
     except ClientError as e:
         logger.error(f"S3 error in ZIP export: {str(e)}")
         return {
