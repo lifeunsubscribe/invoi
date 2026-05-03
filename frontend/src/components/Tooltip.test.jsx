@@ -11,11 +11,18 @@ import Tooltip from './Tooltip'
 describe('Tooltip component - accessibility attributes', () => {
   describe('ARIA attributes', () => {
     it('applies role="tooltip" to the tooltip element', () => {
-      render(
+      const { container } = render(
         <Tooltip text="Help text">
           <button>Trigger</button>
         </Tooltip>
       )
+
+      // Tooltip is not visible by default
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+      // Trigger visibility by focusing the wrapper
+      const wrapper = container.firstChild
+      wrapper.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
 
       const tooltip = screen.getByRole('tooltip')
       expect(tooltip).toBeInTheDocument()
@@ -34,6 +41,10 @@ describe('Tooltip component - accessibility attributes', () => {
           <button>Second</button>
         </Tooltip>
       )
+
+      // Make tooltips visible
+      container1.firstChild.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+      container2.firstChild.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
 
       const tooltip1 = container1.querySelector('[role="tooltip"]')
       const tooltip2 = container2.querySelector('[role="tooltip"]')
@@ -78,11 +89,14 @@ describe('Tooltip component - accessibility attributes', () => {
     })
 
     it('renders tooltip text when provided', () => {
-      render(
+      const { container } = render(
         <Tooltip text="Helpful information">
           <button>Trigger</button>
         </Tooltip>
       )
+
+      // Make tooltip visible
+      container.firstChild.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
 
       expect(screen.getByRole('tooltip')).toHaveTextContent('Helpful information')
     })
@@ -107,6 +121,9 @@ describe('Tooltip component - accessibility attributes', () => {
         </Tooltip>
       )
 
+      // Make tooltip visible
+      container.firstChild.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+
       const tooltip = container.querySelector('[role="tooltip"]')
       const styles = tooltip.style
 
@@ -120,6 +137,9 @@ describe('Tooltip component - accessibility attributes', () => {
           <button>Trigger</button>
         </Tooltip>
       )
+
+      // Make tooltip visible
+      container.firstChild.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
 
       const tooltip = container.querySelector('[role="tooltip"]')
       const styles = tooltip.style
