@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from xhtml2pdf import pisa
 
-from themes import (
+from backend.themes import (
     WEEKLY_TEMPLATE_FILES,
     MONTHLY_TEMPLATE_FILES,
     LOG_TEMPLATE_FILES,
