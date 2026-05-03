@@ -144,6 +144,87 @@ class TestSendEmail:
             )
 
     @patch('services.mail_service.boto3.client')
+    def test_send_email_throttling_error(self, mock_boto3_client):
+        """Test handling of SES throttling/rate limit error"""
+        mock_ses = MagicMock()
+        # Simulate AWS throttling error (common in production when sending too many emails)
+        mock_ses.send_raw_email.side_effect = ClientError(
+            {'Error': {'Code': 'Throttling', 'Message': 'Maximum sending rate exceeded'}},
+            'SendRawEmail'
+        )
+        mock_boto3_client.return_value = mock_ses
+
+        # Verify error is raised and propagated
+        with pytest.raises(ClientError) as exc_info:
+            send_email(
+                to_addresses=['recipient@example.com'],
+                subject='Test',
+                body_text='Test body'
+            )
+
+        assert exc_info.value.response['Error']['Code'] == 'Throttling'
+
+    @patch('services.mail_service.boto3.client')
+    def test_send_email_service_unavailable(self, mock_boto3_client):
+        """Test handling of SES service unavailable error"""
+        mock_ses = MagicMock()
+        # Simulate AWS service outage/unavailability
+        mock_ses.send_raw_email.side_effect = ClientError(
+            {'Error': {'Code': 'ServiceUnavailable', 'Message': 'Service is temporarily unavailable'}},
+            'SendRawEmail'
+        )
+        mock_boto3_client.return_value = mock_ses
+
+        with pytest.raises(ClientError) as exc_info:
+            send_email(
+                to_addresses=['recipient@example.com'],
+                subject='Test',
+                body_text='Test body'
+            )
+
+        assert exc_info.value.response['Error']['Code'] == 'ServiceUnavailable'
+
+    @patch('services.mail_service.boto3.client')
+    def test_send_email_account_sending_paused(self, mock_boto3_client):
+        """Test handling of SES account sending paused error"""
+        mock_ses = MagicMock()
+        # Simulate account sending being paused (e.g., due to bounce rate)
+        mock_ses.send_raw_email.side_effect = ClientError(
+            {'Error': {'Code': 'AccountSendingPausedException', 'Message': 'Account sending has been paused'}},
+            'SendRawEmail'
+        )
+        mock_boto3_client.return_value = mock_ses
+
+        with pytest.raises(ClientError) as exc_info:
+            send_email(
+                to_addresses=['recipient@example.com'],
+                subject='Test',
+                body_text='Test body'
+            )
+
+        assert exc_info.value.response['Error']['Code'] == 'AccountSendingPausedException'
+
+    @patch('services.mail_service.boto3.client')
+    def test_send_email_configuration_set_error(self, mock_boto3_client):
+        """Test handling of SES configuration set error"""
+        mock_ses = MagicMock()
+        # Simulate configuration set not found error
+        mock_ses.send_raw_email.side_effect = ClientError(
+            {'Error': {'Code': 'ConfigurationSetDoesNotExist', 'Message': 'Configuration set does not exist'}},
+            'SendRawEmail'
+        )
+        mock_boto3_client.return_value = mock_ses
+
+        with pytest.raises(ClientError) as exc_info:
+            send_email(
+                to_addresses=['recipient@example.com'],
+                subject='Test',
+                body_text='Test body'
+            )
+
+        assert exc_info.value.response['Error']['Code'] == 'ConfigurationSetDoesNotExist'
+
+    @patch('services.mail_service.boto3.client')
     def test_send_email_default_sender(self, mock_boto3_client):
         """Test default from_email is noreply@goinvoi.com"""
         mock_ses = MagicMock()
