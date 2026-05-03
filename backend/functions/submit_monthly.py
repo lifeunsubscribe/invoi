@@ -367,7 +367,7 @@ def handler(event, context):
                         report_metadata['sentAt'] = datetime.now().isoformat()
                         report_metadata['sentTo'] = email_recipients
 
-                        invoices_table.put_item(Item=report_metadata)
+                        put_invoice(report_metadata)
 
                         # Only update response if database update succeeded
                         response_data['sent'] = email_recipients
