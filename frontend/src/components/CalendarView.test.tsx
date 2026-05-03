@@ -22,7 +22,7 @@ const mockInvoices = [
     totalHours: 40,
     totalPay: 1120.0,
     status: 'sent',
-    dueDate: `${year}-${month}-13`
+    dueDate: `${year}-${month}-28` // Future date to avoid overdue status
   },
   {
     invoiceId: 'INV-20260415',

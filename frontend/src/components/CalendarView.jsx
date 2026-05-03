@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { parseDateInLocalTimezone, getTodayAtMidnight } from "../utils/dateUtils.js";
 
 // Chrome styling (matches HistoryPage.jsx)
 const chrome = {
@@ -45,10 +46,9 @@ function getInvoiceStatus(invoice) {
   if (invoice.status === "sent") {
     // Check if overdue
     if (invoice.dueDate) {
-      const dueDate = new Date(invoice.dueDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (dueDate < today) {
+      const dueDate = parseDateInLocalTimezone(invoice.dueDate);
+      const today = getTodayAtMidnight();
+      if (dueDate && dueDate < today) {
         return "overdue";
       }
     }
