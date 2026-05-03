@@ -93,8 +93,7 @@ Invoi Team"""
         response = send_email(
             to_addresses=[to_address],
             subject=subject,
-            body_text=body_text,
-            from_email="noreply@goinvoi.com"
+            body_text=body_text
         )
 
         return {

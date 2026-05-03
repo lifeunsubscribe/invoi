@@ -401,8 +401,7 @@ def handler(event, context):
                         total_hours=float(invoice_metadata['totalHours']),
                         total_pay=float(invoice_metadata['totalPay']),
                         pdf_data=pdf_bytes,
-                        pdf_filename=f"{invoice_id}.pdf",
-                        from_email="noreply@goinvoi.com"
+                        pdf_filename=f"{invoice_id}.pdf"
                     )
 
                     # Persist updated status to DynamoDB first, before updating response

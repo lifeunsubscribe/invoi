@@ -203,8 +203,7 @@ def handler(event, context):
                     attachments=[{
                         'filename': pdf_filename,
                         'data': pdf_data
-                    }],
-                    from_email='noreply@goinvoi.com'
+                    }]
                 )
 
                 successful += 1
