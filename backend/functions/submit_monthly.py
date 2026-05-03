@@ -356,8 +356,7 @@ def handler(event, context):
                         total_hours=total_hours,
                         total_pay=total_pay,
                         pdf_data=pdf_bytes,
-                        pdf_filename=f"{report_id}.pdf",
-                        from_email="noreply@goinvoi.com"
+                        pdf_filename=f"{report_id}.pdf"
                     )
 
                     # Update report status to 'sent' and record email metadata

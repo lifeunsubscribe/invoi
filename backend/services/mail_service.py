@@ -14,6 +14,7 @@ Functions:
 """
 
 import logging
+import os
 import boto3
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ from email.mime.application import MIMEApplication
 from botocore.exceptions import ClientError
 
 
-def send_email(to_addresses, subject, body_text, attachments=None, from_email="noreply@goinvoi.com"):
+def send_email(to_addresses, subject, body_text, attachments=None, from_email=None):
     """
     Send email via AWS SES with optional PDF attachments.
 
@@ -34,7 +35,7 @@ def send_email(to_addresses, subject, body_text, attachments=None, from_email="n
         attachments: list of dict, optional. Each dict has:
             - 'filename': str, name of attachment (e.g., "invoice.pdf")
             - 'data': bytes, file content
-        from_email: str, sender address (default: noreply@goinvoi.com)
+        from_email: str, sender address (defaults to FROM_EMAIL env var or noreply@goinvoi.com)
 
     Returns:
         dict: SES response with MessageId on success
@@ -43,6 +44,9 @@ def send_email(to_addresses, subject, body_text, attachments=None, from_email="n
         ClientError: if SES send fails
         ValueError: if to_addresses is empty or invalid
     """
+    if from_email is None:
+        from_email = os.environ.get('FROM_EMAIL', 'noreply@goinvoi.com')
+
     if not to_addresses:
         raise ValueError("to_addresses cannot be empty")
 
@@ -159,7 +163,7 @@ Thank you,
 
 
 def send_weekly_email(to_addresses, user_name, week_start, week_end, total_hours,
-                     total_pay, pdf_data, pdf_filename, from_email="noreply@goinvoi.com",
+                     total_pay, pdf_data, pdf_filename, from_email=None,
                      include_logs=False, log_pdf_data=None, log_pdf_filename=None):
     """
     Send weekly invoice email via SES.
@@ -173,7 +177,7 @@ def send_weekly_email(to_addresses, user_name, week_start, week_end, total_hours
         total_pay: float, total amount due
         pdf_data: bytes, invoice PDF content
         pdf_filename: str, invoice PDF filename (e.g., "INV-001.pdf")
-        from_email: str, sender address (default: noreply@goinvoi.com)
+        from_email: str, sender address (defaults to FROM_EMAIL env var or noreply@goinvoi.com)
         include_logs: bool, whether to attach service logs
         log_pdf_data: bytes, optional service log PDF content
         log_pdf_filename: str, optional log PDF filename
@@ -185,6 +189,8 @@ def send_weekly_email(to_addresses, user_name, week_start, week_end, total_hours
         ClientError: if SES send fails
         ValueError: if to_addresses is empty or required attachments are missing
     """
+    if from_email is None:
+        from_email = os.environ.get('FROM_EMAIL', 'noreply@goinvoi.com')
     if not to_addresses:
         raise ValueError("to_addresses cannot be empty")
 
@@ -231,7 +237,7 @@ def send_weekly_email(to_addresses, user_name, week_start, week_end, total_hours
 
 
 def send_monthly_email(to_addresses, user_name, month_label, total_hours,
-                      total_pay, pdf_data, pdf_filename, from_email="noreply@goinvoi.com"):
+                      total_pay, pdf_data, pdf_filename, from_email=None):
     """
     Send monthly report email via SES.
 
@@ -243,7 +249,7 @@ def send_monthly_email(to_addresses, user_name, month_label, total_hours,
         total_pay: float, total invoiced amount for month
         pdf_data: bytes, monthly report PDF content
         pdf_filename: str, report PDF filename (e.g., "RPT-2026-03.pdf")
-        from_email: str, sender address (default: noreply@goinvoi.com)
+        from_email: str, sender address (defaults to FROM_EMAIL env var or noreply@goinvoi.com)
 
     Returns:
         dict: SES response with MessageId on success
@@ -252,6 +258,8 @@ def send_monthly_email(to_addresses, user_name, month_label, total_hours,
         ClientError: if SES send fails
         ValueError: if to_addresses is empty or pdf_data is missing
     """
+    if from_email is None:
+        from_email = os.environ.get('FROM_EMAIL', 'noreply@goinvoi.com')
     if not to_addresses:
         raise ValueError("to_addresses cannot be empty")
 

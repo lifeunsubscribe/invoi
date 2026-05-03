@@ -16,6 +16,9 @@ export default $config({
     // Alert email for CloudWatch alarms (set via `sst secret set AlertEmail <value>`)
     const alertEmail = new sst.Secret("AlertEmail");
 
+    // Sender email for invoices (matches SES verified identity)
+    const fromEmail = "noreply@goinvoi.com";
+
     // SES Email Identity for sending invoices from noreply@goinvoi.com
     // Verifies the goinvoi.com domain and configures DKIM signing
     const emailIdentity = new aws.ses.EmailIdentity("GoinvoiDomain", {
@@ -181,6 +184,9 @@ export default $config({
       layers: [reportlabLayer.arn],
       timeout: "30 seconds",
       memory: "1024 MB",
+      environment: {
+        FROM_EMAIL: fromEmail,
+      },
     });
 
     // Phase 2: Submit monthly report (aggregate weekly invoices into monthly PDF)
@@ -190,6 +196,9 @@ export default $config({
       layers: [reportlabLayer.arn],
       timeout: "30 seconds",
       memory: "1024 MB",
+      environment: {
+        FROM_EMAIL: fromEmail,
+      },
     });
 
     // Phase 2: Test ReportLab layer (temporary endpoint for validation)
@@ -242,6 +251,9 @@ export default $config({
       timeout: "60 seconds",
       memory: "512 MB",
       auth: { jwt: { authorizer: "cognito" } },
+      environment: {
+        FROM_EMAIL: fromEmail,
+      },
       permissions: [
         {
           actions: ["ses:SendEmail", "ses:SendRawEmail"],
@@ -292,6 +304,9 @@ export default $config({
         timeout: "10 seconds",
         memory: "256 MB",
         link: [testSesSecret],
+        environment: {
+          FROM_EMAIL: fromEmail,
+        },
         permissions: [
           {
             actions: ["ses:SendEmail", "ses:SendRawEmail"],
