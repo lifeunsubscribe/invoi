@@ -94,7 +94,7 @@ export default function Tooltip({ children, text, position = "top" }) {
       aria-describedby={visible && text ? tooltipId : undefined}
     >
       {children}
-      {text && (
+      {text && visible && (
         <div style={tooltipStyle} role="tooltip" id={tooltipId}>
           {text}
           <div style={arrowStyle} />
