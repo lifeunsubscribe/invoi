@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_invoice
 from services.logging_config import setup_logging
-from services.s3_service import get_s3_client
+from services.s3_service import get_s3_client, get_bucket_name
 
 # Configure logging for this Lambda function
 setup_logging()
@@ -109,20 +109,10 @@ def handler(event, context):
                 'body': json.dumps({'error': f'{pdf_description} not available for this invoice'})
             }
 
-        # Get S3 bucket name from environment (provided by SST link)
-        bucket_name = os.environ.get('InvoiStorage')
-
-        if not bucket_name:
-            logger.error("InvoiStorage bucket name not found in environment")
-            return {
-                'statusCode': 500,
-                'headers': headers,
-                'body': json.dumps({'error': 'Storage configuration error'})
-            }
-
         # Generate signed S3 URL with 15-minute expiration
         try:
             s3_client = get_s3_client()
+            bucket_name = get_bucket_name()
             signed_url = s3_client.generate_presigned_url(
                 'get_object',
                 Params={
@@ -142,6 +132,13 @@ def handler(event, context):
                 })
             }
 
+        except ValueError as e:
+            logger.error(f"Storage configuration error: {str(e)}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Storage configuration error'})
+            }
         except ClientError as e:
             logger.error(f"S3 error generating presigned URL: {str(e)}")
             return {

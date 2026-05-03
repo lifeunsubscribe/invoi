@@ -37,9 +37,9 @@ class TestGetPdfUrl:
 
         mock_signed_url = 'https://s3.amazonaws.com/bucket/users/user-123/weekly/INV-20260324.pdf?signature=xyz'
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.pdf.get_invoice', return_value=mock_invoice):
-                with patch('functions.pdf.get_s3_client') as mock_get_s3:
+        with patch('functions.pdf.get_invoice', return_value=mock_invoice):
+            with patch('functions.pdf.get_s3_client') as mock_get_s3:
+                with patch('functions.pdf.get_bucket_name', return_value='test-bucket'):
                     mock_s3 = MagicMock()
                     mock_s3.generate_presigned_url.return_value = mock_signed_url
                     mock_get_s3.return_value = mock_s3
@@ -72,9 +72,9 @@ class TestGetPdfUrl:
             'pdfKey': 'users/user-123/weekly/INV-20260324.pdf'
         }
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.pdf.get_invoice', return_value=mock_invoice):
-                with patch('functions.pdf.get_s3_client') as mock_get_s3:
+        with patch('functions.pdf.get_invoice', return_value=mock_invoice):
+            with patch('functions.pdf.get_s3_client') as mock_get_s3:
+                with patch('functions.pdf.get_bucket_name', return_value='test-bucket'):
                     mock_s3 = MagicMock()
                     mock_s3.generate_presigned_url.return_value = 'https://url'
                     mock_get_s3.return_value = mock_s3
@@ -106,9 +106,9 @@ class TestGetPdfUrl:
             'pdfKey': 'users/user-123/weekly/INV-20260324.pdf'
         }
 
-        with patch.dict(os.environ, {'InvoiStorage': 'invoi-bucket'}):
-            with patch('functions.pdf.get_invoice', return_value=mock_invoice):
-                with patch('functions.pdf.get_s3_client') as mock_get_s3:
+        with patch('functions.pdf.get_invoice', return_value=mock_invoice):
+            with patch('functions.pdf.get_s3_client') as mock_get_s3:
+                with patch('functions.pdf.get_bucket_name', return_value='invoi-bucket'):
                     mock_s3 = MagicMock()
                     mock_s3.generate_presigned_url.return_value = 'https://url'
                     mock_get_s3.return_value = mock_s3
@@ -338,9 +338,9 @@ class TestGetPdfUrl:
             'GeneratePresignedUrl'
         )
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.pdf.get_invoice', return_value=mock_invoice):
-                with patch('functions.pdf.get_s3_client') as mock_get_s3:
+        with patch('functions.pdf.get_invoice', return_value=mock_invoice):
+            with patch('functions.pdf.get_s3_client') as mock_get_s3:
+                with patch('functions.pdf.get_bucket_name', return_value='test-bucket'):
                     mock_s3 = MagicMock()
                     mock_s3.generate_presigned_url.side_effect = mock_error
                     mock_get_s3.return_value = mock_s3
@@ -404,9 +404,9 @@ class TestGetPdfUrl:
 
         mock_signed_url = 'https://s3.amazonaws.com/bucket/users/user-123/monthly/RPT-2026-03.pdf?signature=xyz'
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.pdf.get_invoice', return_value=mock_invoice):
-                with patch('functions.pdf.get_s3_client') as mock_get_s3:
+        with patch('functions.pdf.get_invoice', return_value=mock_invoice):
+            with patch('functions.pdf.get_s3_client') as mock_get_s3:
+                with patch('functions.pdf.get_bucket_name', return_value='test-bucket'):
                     mock_s3 = MagicMock()
                     mock_s3.generate_presigned_url.return_value = mock_signed_url
                     mock_get_s3.return_value = mock_s3
@@ -447,9 +447,9 @@ class TestCORS:
             'pdfKey': 'invoices/user-123/INV-20260324.pdf'
         }
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.pdf.get_invoice', return_value=mock_invoice):
-                with patch('functions.pdf.get_s3_client') as mock_get_s3:
+        with patch('functions.pdf.get_invoice', return_value=mock_invoice):
+            with patch('functions.pdf.get_s3_client') as mock_get_s3:
+                with patch('functions.pdf.get_bucket_name', return_value='test-bucket'):
                     mock_s3 = MagicMock()
                     mock_s3.generate_presigned_url.return_value = 'https://s3.amazonaws.com/signed-url'
                     mock_get_s3.return_value = mock_s3
