@@ -19,7 +19,7 @@ export function getInvoiceStatus(invoice) {
     if (invoice.dueDate) {
       const dueDate = parseDateInLocalTimezone(invoice.dueDate);
       const today = getTodayAtMidnight();
-      if (dueDate < today) {
+      if (dueDate && dueDate < today) {
         return "overdue";
       }
     }
