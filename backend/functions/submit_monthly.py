@@ -277,7 +277,7 @@ def handler(event, context):
 
         total_pay = total_hours * rate
 
-        # Save report metadata to Invoices table with type="monthly"
+        # Prepare report metadata for Invoices table with type="monthly"
         # Convert numeric values to Decimal for DynamoDB compatibility
         report_metadata = {
             'userId': user_id,
@@ -297,7 +297,47 @@ def handler(event, context):
             'createdAt': datetime.now().isoformat()
         }
 
-        # Save report metadata to DynamoDB
+        # Phase 3: Send email via SES if send=True
+        # Email failures are handled gracefully - the report is saved successfully
+        # even if the email fails, and the user receives a warning instead of an error
+        email_warning = None
+        if send:
+            email_recipients = []
+
+            # Build recipient list (only accountant for monthly reports)
+            if accountant_email:
+                email_recipients.append(accountant_email)
+
+            if email_recipients:
+                try:
+                    # Send monthly report email with PDF attachment
+                    send_monthly_email(
+                        to_addresses=email_recipients,
+                        user_name=user_config.get('name', 'Contractor'),
+                        month_label=month_label,
+                        total_hours=total_hours,
+                        total_pay=total_pay,
+                        pdf_data=pdf_bytes,
+                        pdf_filename=f"{report_id}.pdf",
+                        from_email="noreply@goinvoi.com"
+                    )
+
+                    # Update report metadata to reflect successful email send
+                    report_metadata['status'] = 'sent'
+                    report_metadata['sentAt'] = datetime.now().isoformat()
+                    report_metadata['sentTo'] = email_recipients
+
+                except Exception as e:
+                    # Email failed but report will be saved successfully
+                    # Return success with warning rather than failing the entire operation
+                    logger.error(f"Email send failed: {str(e)}")
+                    email_warning = f"Report saved but email failed: {str(e)}"
+            else:
+                # No recipients configured
+                email_warning = "No email recipient configured"
+
+        # Save complete report metadata to DynamoDB (single write operation)
+        # This replaces the double-write pattern that occurred when status was updated separately
         # CRITICAL: If metadata save fails, we must delete the orphaned PDF from S3
         # to prevent storage leaks and maintain data consistency
         try:
@@ -323,7 +363,7 @@ def handler(event, context):
             }
 
         # Prepare response data
-        # Convert Decimal to float for JSON serialization
+        # Convert Decimal values to float for JSON serialization
         response_data = {
             'reportId': report_id,
             's3Key': s3_key,
@@ -332,59 +372,13 @@ def handler(event, context):
             'totalPay': float(total_pay),
             'weekCount': len(week_data),
             'status': report_metadata['status'],
-            'createdAt': report_metadata['createdAt']
+            'createdAt': report_metadata['createdAt'],
+            'sent': report_metadata.get('sentTo', [])
         }
 
-        # Phase 3: Send email via SES if send=True
-        # Email failures are handled gracefully - the report is saved successfully
-        # even if the email fails, and the user receives a warning instead of an error
-        if send:
-            email_recipients = []
-            email_warning = None
-
-            # Build recipient list (only accountant for monthly reports)
-            if accountant_email:
-                email_recipients.append(accountant_email)
-
-            if email_recipients:
-                try:
-                    # Send monthly report email with PDF attachment
-                    send_monthly_email(
-                        to_addresses=email_recipients,
-                        user_name=user_config.get('name', 'Contractor'),
-                        month_label=month_label,
-                        total_hours=total_hours,
-                        total_pay=total_pay,
-                        pdf_data=pdf_bytes,
-                        pdf_filename=f"{report_id}.pdf",
-                        from_email="noreply@goinvoi.com"
-                    )
-
-                    # Update report status to 'sent' and record email metadata
-                    report_metadata['status'] = 'sent'
-                    report_metadata['sentAt'] = datetime.now().isoformat()
-                    report_metadata['sentTo'] = email_recipients
-
-                    # Persist updated status to DynamoDB
-                    put_invoice(report_metadata)
-
-                    response_data['sent'] = email_recipients
-                    response_data['status'] = 'sent'
-
-                except Exception as e:
-                    # Email failed but report was saved successfully
-                    # Return success with warning rather than failing the entire operation
-                    logger.error(f"Email send failed: {str(e)}")
-                    email_warning = f"Report saved but email failed: {str(e)}"
-                    response_data['sent'] = []
-                    response_data['emailWarning'] = email_warning
-            else:
-                # No recipients configured
-                response_data['sent'] = []
-                response_data['emailWarning'] = "No email recipient configured"
-        else:
-            # Send=False, just save as draft
-            response_data['sent'] = []
+        # Add email warning if applicable
+        if email_warning:
+            response_data['emailWarning'] = email_warning
 
         # Return report metadata including S3 key
         return {

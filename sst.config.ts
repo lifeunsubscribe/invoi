@@ -553,7 +553,7 @@ export default $config({
 
     // Add test-ses function log retention for dev stage only
     if ($app.stage === "dev") {
-      setLogRetention("test_ses", "testSesFunction");
+      setLogRetention("ses_test_endpoint", "testSesFunction");
     }
 
     // Static site (React frontend) - defined after API/Cognito to pass correct env vars

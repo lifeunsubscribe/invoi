@@ -303,7 +303,50 @@ def handler(event, context):
         # Update invoice metadata with S3 key
         invoice_metadata['pdfKey'] = s3_key
 
-        # Save invoice metadata to DynamoDB
+        # Phase 3: Send email via SES if not save_only mode
+        # Email failures are handled gracefully - the invoice is saved successfully
+        # even if the email fails, and the user receives a warning instead of an error
+        email_warning = None
+        if not save_only:
+            email_recipients = []
+
+            # Build recipient list (filter out empty emails)
+            if client_email:
+                email_recipients.append(client_email)
+            if accountant_email:
+                email_recipients.append(accountant_email)
+
+            if email_recipients:
+                try:
+                    # Send invoice email with PDF attachment
+                    send_weekly_email(
+                        to_addresses=email_recipients,
+                        user_name=user_config.get('name', 'Contractor'),
+                        week_start=week['start'],
+                        week_end=week['end'],
+                        total_hours=float(invoice_metadata['totalHours']),
+                        total_pay=float(invoice_metadata['totalPay']),
+                        pdf_data=pdf_bytes,
+                        pdf_filename=f"{invoice_id}.pdf",
+                        from_email="noreply@goinvoi.com"
+                    )
+
+                    # Update invoice metadata to reflect successful email send
+                    invoice_metadata['status'] = 'sent'
+                    invoice_metadata['sentAt'] = datetime.now().isoformat()
+                    invoice_metadata['sentTo'] = email_recipients
+
+                except Exception as e:
+                    # Email failed but invoice was saved successfully
+                    # Return success with warning rather than failing the entire operation
+                    logger.error(f"Email send failed: {str(e)}")
+                    email_warning = f"Invoice saved but email failed: {str(e)}"
+            else:
+                # No recipients configured
+                email_warning = "No email recipients configured"
+
+        # Save complete invoice metadata to DynamoDB (single write operation)
+        # This replaces the double-write pattern that occurred when status was updated separately
         # CRITICAL: If metadata save fails, we must delete the orphaned PDF from S3
         # to prevent storage leaks and maintain data consistency
         try:
@@ -364,7 +407,7 @@ def handler(event, context):
 
         # Return success response matching frontend expectations
         # Frontend expects: {saved: path, sent: [], invoiceNumber, s3Key}
-        # Convert Decimal to float for JSON serialization
+        # Convert Decimal values to float for JSON serialization
         response_data = {
             'saved': s3_key,
             'invoiceNumber': invoice_number,
@@ -374,68 +417,12 @@ def handler(event, context):
             'totalPay': float(invoice_metadata['totalPay']),
             'status': invoice_metadata['status'],
             'createdAt': invoice_metadata['createdAt'],
-            'sent': []  # Initialize sent field - will be populated if email is sent
+            'sent': invoice_metadata.get('sentTo', [])
         }
 
-        # Phase 3: Send email via SES if not save_only mode
-        # Email failures are handled gracefully - the invoice is saved successfully
-        # even if the email fails, and the user receives a warning instead of an error
-        if not save_only:
-            email_recipients = []
-            email_warning = None
-
-            # Build recipient list (filter out empty emails)
-            if client_email:
-                email_recipients.append(client_email)
-            if accountant_email:
-                email_recipients.append(accountant_email)
-
-            if email_recipients:
-                try:
-                    # Send invoice email with PDF attachment
-                    send_weekly_email(
-                        to_addresses=email_recipients,
-                        user_name=user_config.get('name', 'Contractor'),
-                        week_start=week['start'],
-                        week_end=week['end'],
-                        total_hours=float(invoice_metadata['totalHours']),
-                        total_pay=float(invoice_metadata['totalPay']),
-                        pdf_data=pdf_bytes,
-                        pdf_filename=f"{invoice_id}.pdf",
-                        from_email="noreply@goinvoi.com"
-                    )
-
-                    # Persist updated status to DynamoDB first, before updating response
-                    # This ensures the response status matches the database state
-                    try:
-                        invoice_metadata['status'] = 'sent'
-                        invoice_metadata['sentAt'] = datetime.now().isoformat()
-                        invoice_metadata['sentTo'] = email_recipients
-
-                        invoices_table = boto3.resource('dynamodb').Table(os.environ['INVOICES_TABLE'])
-                        invoices_table.put_item(Item=invoice_metadata)
-
-                        # Only update response if database update succeeded
-                        response_data['sent'] = email_recipients
-                        response_data['status'] = 'sent'
-                    except ClientError as e:
-                        logger.error(f"Failed to update invoice status after email send: {str(e)}")
-                        # Email was sent but status update failed
-                        # Keep status as 'draft' to match database state
-                        response_data['sent'] = []
-                        response_data['emailWarning'] = f"Email sent to {', '.join(email_recipients)} but status update failed. Invoice remains in draft status."
-
-                except Exception as e:
-                    # Email failed but invoice was saved successfully
-                    # Return success with warning rather than failing the entire operation
-                    logger.error(f"Email send failed: {str(e)}")
-                    email_warning = f"Invoice saved but email failed: {str(e)}"
-                    response_data['sent'] = []
-                    response_data['emailWarning'] = email_warning
-            else:
-                # No recipients configured
-                response_data['sent'] = []
-                response_data['emailWarning'] = "No email recipients configured"
+        # Add email warning if applicable
+        if email_warning:
+            response_data['emailWarning'] = email_warning
 
         return {
             'statusCode': 200,
