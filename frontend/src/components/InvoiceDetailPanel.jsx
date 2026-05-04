@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { getAuthToken } from "../auth.jsx";
-import { parseDateInLocalTimezone, getTodayAtMidnight } from "../utils/dateUtils.js";
+import { getInvoiceStatus } from "../utils/invoiceStatus.js";
+import { parseDateInLocalTimezone } from "../utils/dateUtils.js";
 
 // API configuration
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -29,24 +30,6 @@ const STATUS_COLORS = {
   paid: "#5a8a5a",
   overdue: "#d4601a"
 };
-
-/**
- * Determine invoice status (including overdue calculation)
- */
-function getInvoiceStatus(invoice) {
-  if (invoice.status === "paid") return "paid";
-  if (invoice.status === "sent") {
-    if (invoice.dueDate) {
-      const dueDate = parseDateInLocalTimezone(invoice.dueDate);
-      const today = getTodayAtMidnight();
-      if (dueDate && dueDate < today) {
-        return "overdue";
-      }
-    }
-    return "sent";
-  }
-  return "draft";
-}
 
 /**
  * Find the monthly report that contains this invoice

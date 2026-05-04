@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { parseDateInLocalTimezone, getTodayAtMidnight } from "../utils/dateUtils.js";
+import { getInvoiceStatus } from "../utils/invoiceStatus.js";
+import { parseDateInLocalTimezone } from "../utils/dateUtils.js";
 
 // Chrome styling (matches HistoryPage.jsx and other views)
 const chrome = {
@@ -29,26 +30,6 @@ const STATUS_ICONS = {
   paid: "✓",
   overdue: "!"
 };
-
-/**
- * Determine invoice status (including overdue calculation)
- * Shared logic from CalendarView.jsx
- */
-function getInvoiceStatus(invoice) {
-  if (invoice.status === "paid") return "paid";
-  if (invoice.status === "sent") {
-    // Check if overdue
-    if (invoice.dueDate) {
-      const dueDate = parseDateInLocalTimezone(invoice.dueDate);
-      const today = getTodayAtMidnight();
-      if (dueDate && dueDate < today) {
-        return "overdue";
-      }
-    }
-    return "sent";
-  }
-  return "draft";
-}
 
 /**
  * Format date for display (e.g., "Mon, Mar 24")
