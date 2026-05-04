@@ -10,7 +10,6 @@ frontend/dist/
 __pycache__/
 *.pyc
 *.pyo
-backend/.venv
 backend/.venv/
 
 # Environment
