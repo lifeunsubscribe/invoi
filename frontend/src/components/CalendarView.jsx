@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { getInvoiceStatus } from "../utils/invoiceStatus.js";
-import { parseDateInLocalTimezone, getTodayAtMidnight } from "../utils/dateUtils.js";
 
 // Chrome styling (matches HistoryPage.jsx)
 const chrome = {

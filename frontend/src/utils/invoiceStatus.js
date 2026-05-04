@@ -4,6 +4,8 @@
  * Shared logic for calculating invoice status including overdue detection.
  */
 
+import { parseDateInLocalTimezone, getTodayAtMidnight } from "./dateUtils.js";
+
 /**
  * Determine invoice status (including overdue calculation).
  *
@@ -15,9 +17,8 @@ export function getInvoiceStatus(invoice) {
   if (invoice.status === "sent") {
     // Check if overdue
     if (invoice.dueDate) {
-      const dueDate = new Date(invoice.dueDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const dueDate = parseDateInLocalTimezone(invoice.dueDate);
+      const today = getTodayAtMidnight();
       if (dueDate < today) {
         return "overdue";
       }

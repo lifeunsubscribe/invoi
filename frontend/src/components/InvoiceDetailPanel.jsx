@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { getAuthToken } from "../auth.jsx";
 import { getInvoiceStatus } from "../utils/invoiceStatus.js";
-import { parseDateInLocalTimezone, getTodayAtMidnight } from "../utils/dateUtils.js";
+import { parseDateInLocalTimezone } from "../utils/dateUtils.js";
 
 // API configuration
 const API_BASE = import.meta.env.VITE_API_URL || '';
