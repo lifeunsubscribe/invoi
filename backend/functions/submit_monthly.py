@@ -65,7 +65,7 @@ def handler(event, context):
                 'body': json.dumps({'error': 'Missing Authorization header'})
             }
 
-        user_id = extract_user_id_from_token(event)
+        user_id = _extract_user_id_from_token(event)
 
         if not user_id:
             return {
