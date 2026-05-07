@@ -143,6 +143,72 @@ class TestFetchLogoFromS3:
         # Verify error code
         assert exc_info.value.response['Error']['Code'] == 'AccessDenied'
 
+    @patch('services.s3_service._get_s3_client')
+    def test_fetch_logo_s3_service_unavailable(self, mock_get_s3_client):
+        """Test logo fetch when S3 service is unavailable"""
+        # Mock S3 client to raise ServiceUnavailable error (AWS outage scenario)
+        mock_s3 = MagicMock()
+        error_response = {
+            'Error': {
+                'Code': 'ServiceUnavailable',
+                'Message': 'Service is unavailable'
+            }
+        }
+        mock_s3.get_object.side_effect = ClientError(error_response, 'GetObject')
+        mock_get_s3_client.return_value = mock_s3
+
+        # Fetch logo should raise ClientError
+        with patch.dict(os.environ, {'SST_Resource_InvoiStorage_name': 'test-bucket'}):
+            with pytest.raises(ClientError) as exc_info:
+                fetch_logo_from_s3('users/user-123/logo.png')
+
+        # Verify error code
+        assert exc_info.value.response['Error']['Code'] == 'ServiceUnavailable'
+
+    @patch('services.s3_service._get_s3_client')
+    def test_fetch_logo_s3_slow_down(self, mock_get_s3_client):
+        """Test logo fetch when S3 throttles requests"""
+        # Mock S3 client to raise SlowDown error (rate limiting scenario)
+        mock_s3 = MagicMock()
+        error_response = {
+            'Error': {
+                'Code': 'SlowDown',
+                'Message': 'Please reduce your request rate'
+            }
+        }
+        mock_s3.get_object.side_effect = ClientError(error_response, 'GetObject')
+        mock_get_s3_client.return_value = mock_s3
+
+        # Fetch logo should raise ClientError
+        with patch.dict(os.environ, {'SST_Resource_InvoiStorage_name': 'test-bucket'}):
+            with pytest.raises(ClientError) as exc_info:
+                fetch_logo_from_s3('users/user-456/logo.png')
+
+        # Verify error code
+        assert exc_info.value.response['Error']['Code'] == 'SlowDown'
+
+    @patch('services.s3_service._get_s3_client')
+    def test_fetch_logo_s3_internal_error(self, mock_get_s3_client):
+        """Test logo fetch when S3 returns internal error"""
+        # Mock S3 client to raise InternalError (AWS internal failure)
+        mock_s3 = MagicMock()
+        error_response = {
+            'Error': {
+                'Code': 'InternalError',
+                'Message': 'We encountered an internal error. Please try again.'
+            }
+        }
+        mock_s3.get_object.side_effect = ClientError(error_response, 'GetObject')
+        mock_get_s3_client.return_value = mock_s3
+
+        # Fetch logo should raise ClientError
+        with patch.dict(os.environ, {'SST_Resource_InvoiStorage_name': 'test-bucket'}):
+            with pytest.raises(ClientError) as exc_info:
+                fetch_logo_from_s3('users/user-789/logo.png')
+
+        # Verify error code
+        assert exc_info.value.response['Error']['Code'] == 'InternalError'
+
     def test_fetch_logo_no_bucket_name(self):
         """Test logo fetch fails when no bucket name is provided"""
         # No bucket_name parameter and no env var
