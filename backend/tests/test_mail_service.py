@@ -15,6 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from services.mail_service import (
     send_email,
+    send_weekly_email,
+    send_monthly_email,
     create_weekly_email_body,
     create_weekly_with_logs_email_body,
     create_monthly_email_body
@@ -318,3 +320,162 @@ class TestEmailBodyTemplates:
         )
 
         assert "weekly invoices" in body.lower()
+
+
+class TestSendWeeklyEmail:
+    """Tests for send_weekly_email() wrapper function"""
+
+    @patch('services.mail_service.boto3.client')
+    def test_send_weekly_email_success(self, mock_boto3_client):
+        """Test successful weekly invoice email send"""
+        # Mock SES client
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'weekly-msg-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send weekly invoice email
+        response = send_weekly_email(
+            to_addresses=['client@example.com'],
+            user_name='Lisa Wadley',
+            week_start='March 24',
+            week_end='March 30, 2026',
+            total_hours=40,
+            total_pay=1120.00,
+            pdf_data=b'fake-invoice-pdf',
+            pdf_filename='INV-001.pdf'
+        )
+
+        # Verify SES was called
+        assert mock_ses.send_raw_email.called
+        assert response['MessageId'] == 'weekly-msg-id'
+
+        # Verify call arguments include display name
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert 'Lisa Wadley' in call_args['Source']
+
+    @patch('services.mail_service.boto3.client')
+    def test_send_weekly_email_with_logs(self, mock_boto3_client):
+        """Test weekly invoice email with service logs attached"""
+        # Mock SES client
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'weekly-with-logs-msg-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send weekly invoice email with logs
+        response = send_weekly_email(
+            to_addresses=['client@example.com'],
+            user_name='Lisa Wadley',
+            week_start='March 24',
+            week_end='March 30, 2026',
+            total_hours=40,
+            total_pay=1120.00,
+            pdf_data=b'fake-invoice-pdf',
+            pdf_filename='INV-001.pdf',
+            include_logs=True,
+            log_pdf_data=b'fake-log-pdf',
+            log_pdf_filename='LOG-001.pdf'
+        )
+
+        # Verify SES was called
+        assert mock_ses.send_raw_email.called
+        assert response['MessageId'] == 'weekly-with-logs-msg-id'
+
+    def test_send_weekly_email_logs_without_data(self):
+        """Test that include_logs=True without log data raises ValueError"""
+        with pytest.raises(ValueError):
+            send_weekly_email(
+                to_addresses=['client@example.com'],
+                user_name='Lisa Wadley',
+                week_start='March 24',
+                week_end='March 30, 2026',
+                total_hours=40,
+                total_pay=1120.00,
+                pdf_data=b'fake-invoice-pdf',
+                pdf_filename='INV-001.pdf',
+                include_logs=True  # Missing log_pdf_data and log_pdf_filename
+            )
+
+    def test_send_weekly_email_empty_recipients(self):
+        """Test that empty to_addresses raises ValueError"""
+        with pytest.raises(ValueError):
+            send_weekly_email(
+                to_addresses=[],
+                user_name='Lisa Wadley',
+                week_start='March 24',
+                week_end='March 30, 2026',
+                total_hours=40,
+                total_pay=1120.00,
+                pdf_data=b'fake-invoice-pdf',
+                pdf_filename='INV-001.pdf'
+            )
+
+    def test_send_weekly_email_missing_pdf_data(self):
+        """Test that missing pdf_data raises ValueError"""
+        with pytest.raises(ValueError):
+            send_weekly_email(
+                to_addresses=['client@example.com'],
+                user_name='Lisa Wadley',
+                week_start='March 24',
+                week_end='March 30, 2026',
+                total_hours=40,
+                total_pay=1120.00,
+                pdf_data=None,
+                pdf_filename='INV-001.pdf'
+            )
+
+
+class TestSendMonthlyEmail:
+    """Tests for send_monthly_email() wrapper function"""
+
+    @patch('services.mail_service.boto3.client')
+    def test_send_monthly_email_success(self, mock_boto3_client):
+        """Test successful monthly report email send"""
+        # Mock SES client
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'monthly-msg-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send monthly report email
+        response = send_monthly_email(
+            to_addresses=['client@example.com'],
+            user_name='Lisa Wadley',
+            month_label='March 2026',
+            total_hours=160,
+            total_pay=4480.00,
+            pdf_data=b'fake-report-pdf',
+            pdf_filename='RPT-2026-03.pdf'
+        )
+
+        # Verify SES was called
+        assert mock_ses.send_raw_email.called
+        assert response['MessageId'] == 'monthly-msg-id'
+
+        # Verify call arguments include display name
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert 'Lisa Wadley' in call_args['Source']
+
+    def test_send_monthly_email_empty_recipients(self):
+        """Test that empty to_addresses raises ValueError"""
+        with pytest.raises(ValueError):
+            send_monthly_email(
+                to_addresses=[],
+                user_name='Lisa Wadley',
+                month_label='March 2026',
+                total_hours=160,
+                total_pay=4480.00,
+                pdf_data=b'fake-report-pdf',
+                pdf_filename='RPT-2026-03.pdf'
+            )
+
+    def test_send_monthly_email_missing_pdf_data(self):
+        """Test that missing pdf_data raises ValueError"""
+        with pytest.raises(ValueError):
+            send_monthly_email(
+                to_addresses=['client@example.com'],
+                user_name='Lisa Wadley',
+                month_label='March 2026',
+                total_hours=160,
+                total_pay=4480.00,
+                pdf_data=None,
+                pdf_filename='RPT-2026-03.pdf'
+            )
