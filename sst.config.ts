@@ -288,7 +288,7 @@ export default $config({
     if ($app.stage === "dev") {
       const testSesSecret = new sst.Secret("TestSesSecret");
       api.route("GET /api/test-ses", {
-        handler: "backend/functions/test_ses.handler",
+        handler: "backend/functions/ses_test_endpoint.handler",
         timeout: "10 seconds",
         memory: "256 MB",
         link: [testSesSecret],
@@ -553,7 +553,7 @@ export default $config({
 
     // Add test-ses function log retention for dev stage only
     if ($app.stage === "dev") {
-      setLogRetention("test_ses", "testSesFunction");
+      setLogRetention("ses_test_endpoint", "testSesFunction");
     }
 
     // Static site (React frontend) - defined after API/Cognito to pass correct env vars
