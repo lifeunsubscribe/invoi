@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { getInvoiceStatus } from "../utils/invoiceStatus.js";
+import { parseDateInLocalTimezone } from "../utils/dateUtils.js";
 
 // Chrome styling (matches HistoryPage.jsx and other views)
 const chrome = {
@@ -30,32 +32,12 @@ const STATUS_ICONS = {
 };
 
 /**
- * Determine invoice status (including overdue calculation)
- * Shared logic from CalendarView.jsx
- */
-function getInvoiceStatus(invoice) {
-  if (invoice.status === "paid") return "paid";
-  if (invoice.status === "sent") {
-    // Check if overdue
-    if (invoice.dueDate) {
-      const dueDate = new Date(invoice.dueDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (dueDate < today) {
-        return "overdue";
-      }
-    }
-    return "sent";
-  }
-  return "draft";
-}
-
-/**
  * Format date for display (e.g., "Mon, Mar 24")
  */
 function formatDateShort(dateString) {
   if (!dateString) return "";
-  const date = new Date(dateString);
+  const date = parseDateInLocalTimezone(dateString);
+  if (!date) return "";
   const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()];
   const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][date.getMonth()];
   const day = date.getDate();
@@ -105,8 +87,9 @@ export default function FocusView({ invoices, config, onInvoiceClick }) {
       .filter(invoice => invoice.weekStart) // Only invoices with valid dates
       .sort((a, b) => {
         // Sort by weekStart date descending (newest first)
-        const dateA = new Date(a.weekStart);
-        const dateB = new Date(b.weekStart);
+        const dateA = parseDateInLocalTimezone(a.weekStart);
+        const dateB = parseDateInLocalTimezone(b.weekStart);
+        if (!dateA || !dateB) return 0;
         return dateB.getTime() - dateA.getTime();
       });
   }, [invoices]);

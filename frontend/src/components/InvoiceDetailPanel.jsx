@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { getAuthToken } from "../auth.jsx";
+import { getInvoiceStatus } from "../utils/invoiceStatus.js";
+import { parseDateInLocalTimezone } from "../utils/dateUtils.js";
 
 // API configuration
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -30,25 +32,6 @@ const STATUS_COLORS = {
 };
 
 /**
- * Determine invoice status (including overdue calculation)
- */
-function getInvoiceStatus(invoice) {
-  if (invoice.status === "paid") return "paid";
-  if (invoice.status === "sent") {
-    if (invoice.dueDate) {
-      const dueDate = new Date(invoice.dueDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (dueDate < today) {
-        return "overdue";
-      }
-    }
-    return "sent";
-  }
-  return "draft";
-}
-
-/**
  * Find the monthly report that contains this invoice
  *
  * Monthly reports aggregate all weekly invoices for a given month.
@@ -62,7 +45,9 @@ function getInvoiceStatus(invoice) {
 function findMonthlyReport(invoice, allInvoices) {
   if (!invoice.weekStart) return null;
 
-  const invoiceDate = new Date(invoice.weekStart);
+  const invoiceDate = parseDateInLocalTimezone(invoice.weekStart);
+  if (!invoiceDate) return null;
+
   const year = invoiceDate.getFullYear();
   const month = invoiceDate.getMonth(); // 0-indexed (0 = January)
 
@@ -73,8 +58,8 @@ function findMonthlyReport(invoice, allInvoices) {
     // Monthly reports have invoiceId like "RPT-2026-03"
     // Compare year and month from the report's weekStart date
     if (inv.weekStart) {
-      const reportDate = new Date(inv.weekStart);
-      return reportDate.getFullYear() === year && reportDate.getMonth() === month;
+      const reportDate = parseDateInLocalTimezone(inv.weekStart);
+      return reportDate && reportDate.getFullYear() === year && reportDate.getMonth() === month;
     }
     return false;
   });

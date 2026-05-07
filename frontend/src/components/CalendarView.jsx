@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { getInvoiceStatus } from "../utils/invoiceStatus.js";
 
 // Chrome styling (matches HistoryPage.jsx)
 const chrome = {
@@ -35,26 +36,6 @@ function getClientInitials(clientName) {
   }
   // Single word: take first two letters
   return clientName.slice(0, 2).toUpperCase();
-}
-
-/**
- * Determine invoice status (including overdue calculation)
- */
-function getInvoiceStatus(invoice) {
-  if (invoice.status === "paid") return "paid";
-  if (invoice.status === "sent") {
-    // Check if overdue
-    if (invoice.dueDate) {
-      const dueDate = new Date(invoice.dueDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (dueDate < today) {
-        return "overdue";
-      }
-    }
-    return "sent";
-  }
-  return "draft";
 }
 
 /**

@@ -4,10 +4,12 @@
  * Wraps children with a hover/focus tooltip to guide new users.
  */
 
-import { useState } from "react";
+import { useState, useId } from "react";
 
 export default function Tooltip({ children, text, position = "top" }) {
   const [visible, setVisible] = useState(false);
+  // Generate unique ID for ARIA relationship between trigger and tooltip
+  const tooltipId = useId();
 
   const tooltipStyle = {
     position: "absolute",
@@ -89,10 +91,11 @@ export default function Tooltip({ children, text, position = "top" }) {
       onMouseLeave={() => setVisible(false)}
       onFocus={() => setVisible(true)}
       onBlur={() => setVisible(false)}
+      aria-describedby={visible && text ? tooltipId : undefined}
     >
       {children}
-      {text && (
-        <div style={tooltipStyle}>
+      {text && visible && (
+        <div style={tooltipStyle} role="tooltip" id={tooltipId}>
           {text}
           <div style={arrowStyle} />
         </div>

@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { getAuthToken } from "../auth.jsx";
+import { getInvoiceStatus } from "../utils/invoiceStatus.js";
+import { parseDateInLocalTimezone } from "../utils/dateUtils.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -24,27 +26,6 @@ const STATUS_LABELS = {
   paid: "Paid",
   overdue: "Overdue"
 };
-
-/**
- * Determine invoice status (including overdue calculation)
- * Shared logic from CalendarView.jsx
- */
-function getInvoiceStatus(invoice) {
-  if (invoice.status === "paid") return "paid";
-  if (invoice.status === "sent") {
-    // Check if overdue
-    if (invoice.dueDate) {
-      const dueDate = new Date(invoice.dueDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (dueDate < today) {
-        return "overdue";
-      }
-    }
-    return "sent";
-  }
-  return "draft";
-}
 
 /**
  * Extract unique client names/IDs from invoices for filter dropdown
@@ -114,8 +95,10 @@ export default function ListView({ invoices, config, onInvoiceClick, onRefresh }
 
       // Date range filter - calculates time ranges relative to current date
       if (dateRangeFilter !== "all" && invoice.weekStart) {
-        const invoiceDate = new Date(invoice.weekStart);
-        const now = new Date();
+        const invoiceDate = parseDateInLocalTimezone(invoice.weekStart);
+        if (!invoiceDate) return false;
+
+        const now = getTodayAtMidnight();
         const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
@@ -149,8 +132,8 @@ export default function ListView({ invoices, config, onInvoiceClick, onRefresh }
       let compareValue = 0;
 
       if (sortBy === "date") {
-        const dateA = new Date(a.weekStart || 0);
-        const dateB = new Date(b.weekStart || 0);
+        const dateA = parseDateInLocalTimezone(a.weekStart) || new Date(0);
+        const dateB = parseDateInLocalTimezone(b.weekStart) || new Date(0);
         compareValue = dateA.getTime() - dateB.getTime();
       } else if (sortBy === "amount") {
         compareValue = (a.totalPay || 0) - (b.totalPay || 0);
