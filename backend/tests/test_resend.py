@@ -101,8 +101,8 @@ class TestResendHandler:
     @patch('functions.resend.get_user')
     @patch('functions.resend.get_invoice')
     @patch('functions.resend.send_email')
-    @patch('functions.resend.s3_client')
-    def test_successful_resend_single_invoice(self, mock_s3, mock_send_email, mock_get_invoice, mock_get_user):
+    @patch('functions.resend.get_s3_client')
+    def test_successful_resend_single_invoice(self, mock_get_s3, mock_send_email, mock_get_invoice, mock_get_user):
         """Test successful resend of a single invoice"""
         # Mock user config
         mock_get_user.return_value = {
@@ -130,9 +130,11 @@ class TestResendHandler:
         }
 
         # Mock S3 PDF fetch
+        mock_s3 = MagicMock()
         mock_pdf_obj = MagicMock()
         mock_pdf_obj['Body'].read.return_value = b'fake-pdf-content'
         mock_s3.get_object.return_value = mock_pdf_obj
+        mock_get_s3.return_value = mock_s3
 
         # Mock send_email
         mock_send_email.return_value = {'MessageId': 'msg-123'}

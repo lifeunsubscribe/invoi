@@ -12,16 +12,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_user, put_invoice
 from services.logging_config import setup_logging
+from services.s3_service import get_s3_client, get_bucket_name
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# S3 client for PDF storage
-s3_client = boto3.client('s3')
-
-# Get bucket name from SST Resource environment variable
-BUCKET_NAME = os.environ.get('SST_Resource_InvoiStorage_name')
 
 # Maximum file size (10MB per file)
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
@@ -364,8 +359,10 @@ def handler(event, context):
                 s3_key = f"users/{user_id}/weekly/{invoice_id}.pdf"
 
                 # Upload PDF to S3 with metadata for tracking
+                s3_client = get_s3_client()
+                bucket_name = get_bucket_name()
                 s3_client.put_object(
-                    Bucket=BUCKET_NAME,
+                    Bucket=bucket_name,
                     Key=s3_key,
                     Body=pdf_file['content'],
                     ContentType='application/pdf',
