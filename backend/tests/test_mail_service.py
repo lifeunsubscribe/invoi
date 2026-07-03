@@ -15,6 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from services.mail_service import (
     send_email,
+    send_weekly_email,
+    send_monthly_email,
     create_weekly_email_body,
     create_weekly_with_logs_email_body,
     create_monthly_email_body
@@ -160,6 +162,221 @@ class TestSendEmail:
         # Verify default sender
         call_args = mock_ses.send_raw_email.call_args[1]
         assert call_args['Source'] == 'noreply@goinvoi.com'
+
+    @patch.dict(os.environ, {'FROM_EMAIL': 'custom@example.com'})
+    @patch('services.mail_service.boto3.client')
+    def test_send_email_uses_env_var(self, mock_boto3_client):
+        """Test that FROM_EMAIL environment variable is used when set"""
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'test-message-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send without specifying from_email (should use env var)
+        send_email(
+            to_addresses=['recipient@example.com'],
+            subject='Test',
+            body_text='Test body'
+        )
+
+        # Verify env var sender is used
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert call_args['Source'] == 'custom@example.com'
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch('services.mail_service.boto3.client')
+    def test_send_email_fallback_when_env_var_not_set(self, mock_boto3_client):
+        """Test that fallback to noreply@goinvoi.com works when FROM_EMAIL not set"""
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'test-message-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send without specifying from_email (should use fallback)
+        send_email(
+            to_addresses=['recipient@example.com'],
+            subject='Test',
+            body_text='Test body'
+        )
+
+        # Verify fallback sender is used
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert call_args['Source'] == 'noreply@goinvoi.com'
+
+    @patch.dict(os.environ, {'FROM_EMAIL': 'env@example.com'})
+    @patch('services.mail_service.boto3.client')
+    def test_send_email_explicit_overrides_env_var(self, mock_boto3_client):
+        """Test that explicit from_email parameter overrides env var"""
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'test-message-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send with explicit from_email (should override env var)
+        send_email(
+            to_addresses=['recipient@example.com'],
+            subject='Test',
+            body_text='Test body',
+            from_email='explicit@example.com'
+        )
+
+        # Verify explicit sender is used
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert call_args['Source'] == 'explicit@example.com'
+
+
+class TestSendWeeklyEmail:
+    """Tests for send_weekly_email() function"""
+
+    @patch.dict(os.environ, {'FROM_EMAIL': 'custom@example.com'})
+    @patch('services.mail_service.boto3.client')
+    def test_send_weekly_email_uses_env_var(self, mock_boto3_client):
+        """Test that send_weekly_email uses FROM_EMAIL environment variable when set"""
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'test-message-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send weekly email without specifying from_email
+        send_weekly_email(
+            to_addresses=['client@example.com'],
+            user_name='Test User',
+            week_start='Jan 1',
+            week_end='Jan 7, 2026',
+            total_hours=40,
+            total_pay=1000.00,
+            pdf_data=b'fake pdf content',
+            pdf_filename='invoice.pdf'
+        )
+
+        # Verify env var is used in the from address
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert 'custom@example.com' in call_args['Source']
+        assert 'Test User' in call_args['Source']
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch('services.mail_service.boto3.client')
+    def test_send_weekly_email_fallback_when_env_var_not_set(self, mock_boto3_client):
+        """Test that send_weekly_email falls back to noreply@goinvoi.com when FROM_EMAIL not set"""
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'test-message-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send weekly email without specifying from_email
+        send_weekly_email(
+            to_addresses=['client@example.com'],
+            user_name='Test User',
+            week_start='Jan 1',
+            week_end='Jan 7, 2026',
+            total_hours=40,
+            total_pay=1000.00,
+            pdf_data=b'fake pdf content',
+            pdf_filename='invoice.pdf'
+        )
+
+        # Verify fallback is used
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert 'noreply@goinvoi.com' in call_args['Source']
+        assert 'Test User' in call_args['Source']
+
+    @patch.dict(os.environ, {'FROM_EMAIL': 'env@example.com'})
+    @patch('services.mail_service.boto3.client')
+    def test_send_weekly_email_explicit_overrides_env_var(self, mock_boto3_client):
+        """Test that explicit from_email parameter overrides env var in send_weekly_email"""
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'test-message-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send weekly email with explicit from_email
+        send_weekly_email(
+            to_addresses=['client@example.com'],
+            user_name='Test User',
+            week_start='Jan 1',
+            week_end='Jan 7, 2026',
+            total_hours=40,
+            total_pay=1000.00,
+            pdf_data=b'fake pdf content',
+            pdf_filename='invoice.pdf',
+            from_email='explicit@example.com'
+        )
+
+        # Verify explicit sender is used
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert 'explicit@example.com' in call_args['Source']
+        assert 'Test User' in call_args['Source']
+
+
+class TestSendMonthlyEmail:
+    """Tests for send_monthly_email() function"""
+
+    @patch.dict(os.environ, {'FROM_EMAIL': 'custom@example.com'})
+    @patch('services.mail_service.boto3.client')
+    def test_send_monthly_email_uses_env_var(self, mock_boto3_client):
+        """Test that send_monthly_email uses FROM_EMAIL environment variable when set"""
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'test-message-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send monthly email without specifying from_email
+        send_monthly_email(
+            to_addresses=['client@example.com'],
+            user_name='Test User',
+            month_label='March 2026',
+            total_hours=160,
+            total_pay=4000.00,
+            pdf_data=b'fake pdf content',
+            pdf_filename='report.pdf'
+        )
+
+        # Verify env var is used in the from address
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert 'custom@example.com' in call_args['Source']
+        assert 'Test User' in call_args['Source']
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch('services.mail_service.boto3.client')
+    def test_send_monthly_email_fallback_when_env_var_not_set(self, mock_boto3_client):
+        """Test that send_monthly_email falls back to noreply@goinvoi.com when FROM_EMAIL not set"""
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'test-message-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send monthly email without specifying from_email
+        send_monthly_email(
+            to_addresses=['client@example.com'],
+            user_name='Test User',
+            month_label='March 2026',
+            total_hours=160,
+            total_pay=4000.00,
+            pdf_data=b'fake pdf content',
+            pdf_filename='report.pdf'
+        )
+
+        # Verify fallback is used
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert 'noreply@goinvoi.com' in call_args['Source']
+        assert 'Test User' in call_args['Source']
+
+    @patch.dict(os.environ, {'FROM_EMAIL': 'env@example.com'})
+    @patch('services.mail_service.boto3.client')
+    def test_send_monthly_email_explicit_overrides_env_var(self, mock_boto3_client):
+        """Test that explicit from_email parameter overrides env var in send_monthly_email"""
+        mock_ses = MagicMock()
+        mock_ses.send_raw_email.return_value = {'MessageId': 'test-message-id'}
+        mock_boto3_client.return_value = mock_ses
+
+        # Send monthly email with explicit from_email
+        send_monthly_email(
+            to_addresses=['client@example.com'],
+            user_name='Test User',
+            month_label='March 2026',
+            total_hours=160,
+            total_pay=4000.00,
+            pdf_data=b'fake pdf content',
+            pdf_filename='report.pdf',
+            from_email='explicit@example.com'
+        )
+
+        # Verify explicit sender is used
+        call_args = mock_ses.send_raw_email.call_args[1]
+        assert 'explicit@example.com' in call_args['Source']
+        assert 'Test User' in call_args['Source']
 
 
 class TestEmailBodyTemplates:
