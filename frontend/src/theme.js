@@ -5,11 +5,14 @@
  * Used across landing pages, templates, and app components.
  */
 
+// Define primary RGB once for reuse
+const PRIMARY_RGB = "183, 110, 121";
+
 const theme = {
   colors: {
     // Primary brand color
     primary: "#b76e79",
-    primaryRgb: "183, 110, 121",
+    primaryRgb: PRIMARY_RGB,
 
     // Text colors
     text: {
@@ -108,20 +111,20 @@ const theme = {
      * @param {number} alpha - Opacity from 0 to 1
      * @returns {string} rgba color string
      */
-    primaryWithOpacity: (alpha) => `rgba(183, 110, 121, ${alpha})`,
+    primaryWithOpacity: (alpha) => `rgba(${PRIMARY_RGB}, ${alpha})`,
   },
 
   // Common gradients
   gradients: {
     primaryButton: (primaryColor) =>
-      `linear-gradient(135deg, ${primaryColor}, rgba(183, 110, 121, 0.85))`,
-    ctaBackground: `linear-gradient(135deg, rgba(183, 110, 121, 0.12), rgba(183, 110, 121, 0.24))`,
+      `linear-gradient(135deg, ${primaryColor}, rgba(${PRIMARY_RGB}, 0.85))`,
+    ctaBackground: `linear-gradient(135deg, rgba(${PRIMARY_RGB}, 0.12), rgba(${PRIMARY_RGB}, 0.24))`,
   },
 
   // Common shadows
   shadows: {
-    primary: `0 6px 24px rgba(183, 110, 121, 0.3)`,
-    primaryHover: `0 10px 32px rgba(183, 110, 121, 0.4)`,
+    primary: `0 6px 24px rgba(${PRIMARY_RGB}, 0.3)`,
+    primaryHover: `0 10px 32px rgba(${PRIMARY_RGB}, 0.4)`,
   },
 };
 
