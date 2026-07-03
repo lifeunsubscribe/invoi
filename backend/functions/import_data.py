@@ -360,7 +360,15 @@ def handler(event, context):
 
                 # Upload PDF to S3 with metadata for tracking
                 s3_client = get_s3_client()
-                bucket_name = get_bucket_name()
+                try:
+                    bucket_name = get_bucket_name()
+                except ValueError as e:
+                    logger.error(f"S3 bucket name not configured: {e}")
+                    return {
+                        'statusCode': 500,
+                        'headers': headers,
+                        'body': json.dumps({'error': 'Storage configuration error'})
+                    }
                 s3_client.put_object(
                     Bucket=bucket_name,
                     Key=s3_key,

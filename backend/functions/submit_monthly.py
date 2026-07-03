@@ -249,7 +249,15 @@ def handler(event, context):
 
         # Upload PDF to S3 at users/{userId}/reports/RPT-{year}-{month}.pdf
         # Get bucket name from centralized S3 service
-        bucket_name = get_bucket_name()
+        try:
+            bucket_name = get_bucket_name()
+        except ValueError as e:
+            logger.error(f"S3 bucket name not configured: {e}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Storage configuration error'})
+            }
         # Note: report_id already defined above during idempotency check
         s3_key = f"users/{user_id}/reports/{report_id}.pdf"
 

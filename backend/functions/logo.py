@@ -136,7 +136,15 @@ def handle_get(user_id, headers):
         # Fetch logo from S3
         try:
             s3_client = get_s3_client()
-            bucket_name = get_bucket_name()
+            try:
+                bucket_name = get_bucket_name()
+            except ValueError as e:
+                logger.error(f"S3 bucket name not configured: {e}")
+                return {
+                    'statusCode': 500,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Storage configuration error'})
+                }
             response = s3_client.get_object(Bucket=bucket_name, Key=logo_key)
             logo_bytes = response['Body'].read()
             content_type = response.get('ContentType', 'application/octet-stream')
@@ -290,7 +298,15 @@ def handle_upload(user_id, event, headers):
         # Delete old logo file if it exists with a different extension
         # This prevents orphaned files when switching between PNG/JPG formats
         s3_client = get_s3_client()
-        bucket_name = get_bucket_name()
+        try:
+            bucket_name = get_bucket_name()
+        except ValueError as e:
+            logger.error(f"S3 bucket name not configured: {e}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Storage configuration error'})
+            }
 
         if user.get('logoKey') and user['logoKey'] != s3_key:
             old_logo_key = user['logoKey']
@@ -373,7 +389,15 @@ def handle_delete(user_id, headers):
         # Delete from S3
         try:
             s3_client = get_s3_client()
-            bucket_name = get_bucket_name()
+            try:
+                bucket_name = get_bucket_name()
+            except ValueError as e:
+                logger.error(f"S3 bucket name not configured: {e}")
+                return {
+                    'statusCode': 500,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Storage configuration error'})
+                }
             s3_client.delete_object(
                 Bucket=bucket_name,
                 Key=logo_key
