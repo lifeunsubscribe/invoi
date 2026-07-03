@@ -312,6 +312,30 @@ class TestValidation:
         assert error is not None
         assert 'positive' in error.lower()
 
+    def test_validate_string_rate_accepted(self):
+        """
+        Regression: the invoice-builder desktop app stored rate as a string
+        (e.g. '25') and later crashed when multiplying by hours. invoi must
+        accept string rates at the config boundary — validate_profile_fields
+        coerces via float() before checking positivity.
+        """
+        data = {'name': 'Test User', 'email': 'test@example.com', 'rate': '25'}
+        error = validate_profile_fields(data)
+        assert error is None
+
+    def test_validate_string_rate_with_decimal(self):
+        """String rate with decimal point (e.g. '27.50') should validate."""
+        data = {'name': 'Test User', 'email': 'test@example.com', 'rate': '27.50'}
+        error = validate_profile_fields(data)
+        assert error is None
+
+    def test_validate_string_rate_rejects_non_numeric(self):
+        """String rate that isn't parseable should fail validation, not crash."""
+        data = {'name': 'Test User', 'email': 'test@example.com', 'rate': 'twenty'}
+        error = validate_profile_fields(data)
+        assert error is not None
+        assert 'valid number' in error.lower()
+
     def test_validate_valid_profile(self):
         """Validation should pass for valid profile data"""
         data = {

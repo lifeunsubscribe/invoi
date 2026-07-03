@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.db_service import get_user, put_user
 from services.logging_config import setup_logging
+from services.error_reporter import report_exception
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
@@ -75,8 +76,9 @@ def handler(event, context):
             }
 
     except Exception as e:
-        # Log error for CloudWatch
-        logger.error(f"Unhandled error in config handler: {str(e)}")
+        # Log error for CloudWatch and publish a single-request alert to SNS
+        logger.exception(f"Unhandled error in config handler: {str(e)}")
+        report_exception("config", e, event=event, user_id=locals().get('user_id'))
         return {
             'statusCode': 500,
             'headers': headers,

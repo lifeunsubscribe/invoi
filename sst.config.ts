@@ -96,6 +96,37 @@ export default $config({
       description: "ReportLab and Pillow for PDF generation",
     });
 
+    // SNS Topic for CloudWatch alarm notifications + per-request error reports
+    // Declared here (before routes) so Lambda handlers can receive its ARN via
+    // environment variable and publish single-failure alerts to it. The threshold
+    // alarms that also fan out to this topic are defined further below.
+    const alarmTopic = new aws.sns.Topic("InvoiAlarmTopic", {
+      displayName: "Invoi CloudWatch Alarms",
+    });
+
+    // Email subscription for alarm notifications
+    // Note: Email address will need to confirm subscription after deployment
+    new aws.sns.TopicSubscription("InvoiAlarmEmailSubscription", {
+      topic: alarmTopic.arn,
+      protocol: "email",
+      endpoint: alertEmail.value,
+    });
+
+    // Shared config block for Lambda routes that should report single-request
+    // failures to SNS (via backend/services/error_reporter.py). Spread into any
+    // route via `...errorReporting` to grant publish rights and inject the ARN.
+    const errorReporting = {
+      environment: {
+        ALARM_TOPIC_ARN: alarmTopic.arn,
+      },
+      permissions: [
+        {
+          actions: ["sns:Publish"],
+          resources: [alarmTopic.arn],
+        },
+      ],
+    };
+
     // API Gateway + Lambda functions
     // In production, uses custom domain api.goinvoi.com with ACM certificate
     // In dev, uses auto-generated API Gateway URL
@@ -160,11 +191,13 @@ export default $config({
     api.route("GET /api/config", {
       handler: "backend/functions/config.handler",
       link: [usersTable],
+      ...errorReporting,
     });
 
     api.route("POST /api/config", {
       handler: "backend/functions/config.handler",
       link: [usersTable],
+      ...errorReporting,
     });
 
     // Phase 2: Scan month for existing invoices
@@ -181,6 +214,7 @@ export default $config({
       layers: [reportlabLayer.arn],
       timeout: "30 seconds",
       memory: "1024 MB",
+      ...errorReporting,
     });
 
     // Phase 2: Submit monthly report (aggregate weekly invoices into monthly PDF)
@@ -190,6 +224,7 @@ export default $config({
       layers: [reportlabLayer.arn],
       timeout: "30 seconds",
       memory: "1024 MB",
+      ...errorReporting,
     });
 
     // Phase 2: Test ReportLab layer (temporary endpoint for validation)
@@ -316,20 +351,8 @@ export default $config({
     // ==========================================
     // CloudWatch Monitoring & Alerts (Phase 6)
     // ==========================================
-
-    // SNS Topic for CloudWatch alarm notifications
-    // Sends email alerts when Lambda errors or API Gateway 5xx responses exceed threshold
-    const alarmTopic = new aws.sns.Topic("InvoiAlarmTopic", {
-      displayName: "Invoi CloudWatch Alarms",
-    });
-
-    // Email subscription for alarm notifications
-    // Note: Email address will need to confirm subscription after deployment
-    new aws.sns.TopicSubscription("InvoiAlarmEmailSubscription", {
-      topic: alarmTopic.arn,
-      protocol: "email",
-      endpoint: alertEmail.value,
-    });
+    // Note: `alarmTopic` and its email subscription are declared above the API
+    // routes so handlers can receive ARN + publish permission via `errorReporting`.
 
     // Lambda Error Rate Alarm
     // Triggers when Lambda error rate exceeds 1% over 5 minutes

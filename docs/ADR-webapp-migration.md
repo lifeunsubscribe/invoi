@@ -633,7 +633,8 @@ invoi/
 ### Phase 6: Launch Prep
 
 - [ ] Privacy policy and terms of service (required for Google OAuth)
-- [ ] Error monitoring (CloudWatch alarms on Lambda errors)
+- [x] Error monitoring (CloudWatch alarms on Lambda errors) *(done — see [.rite/docs/changelog.md](../.rite/docs/changelog.md) 2026-04-05; threshold alarms for Lambda errors >1% and API 5xx >1%)*
+- [x] Per-request crash reporting on the critical submit + config paths *(done 2026-04-11; `backend/services/error_reporter.py` publishes to the alarm SNS topic on every 500, so single-user bugs page immediately rather than waiting for the threshold alarm to trip — see "Lessons from invoice-builder" below)*
 - [ ] Rate limiting on API Gateway
 - [ ] Invite 5–10 beta users from contractor communities
 - [ ] Collect feedback, iterate
@@ -661,6 +662,29 @@ invoi/
 7. **"Mark as paid" micro-animation** — What's the right celebratory moment? Confetti? Checkmark bloom? Subtle color wash? Should match the relaxation/amusement design philosophy without being cheesy.
 8. **Invoice number reset on year change** — Should `nextNum` auto-reset to 1 on January 1 when `includeYear` is enabled? Or always increment globally? Users probably expect reset, but it could cause confusion if they switch the toggle mid-year.
 9. **Voice transcription quality/cost** — What's the acceptable latency and cost per transcription for Pro users? Need to benchmark Anthropic API vs. Whisper vs. other options.
+
+---
+
+## Lessons from invoice-builder
+
+The desktop predecessor (`invoice-builder`, in maintenance mode) shipped a release on 2026-04-10 that crashed Lisa's app on update with "frontend build directory does not exist," and the next morning (2026-04-11) silently 500'd on her invoice submission with no crash report email firing. Two related failures, both observed during a real billing cycle.
+
+Root causes in invoice-builder:
+
+1. **Rate stored as string, multiplied by float hours.** A user's `config.json` had `"rate": "25"` rather than `25`, and the submit handler did `rate * hours` directly. Python's `str * float` raises `TypeError: can't multiply sequence by non-int of type 'float'`. Fix: cast at every read site, plus normalize on config load.
+2. **Crash reporter never fired.** The handler caught the exception, returned 500 to the frontend, and logged locally — but the email-on-crash hook was inside a different except branch. The bug was real, the user was affected, and nothing paged.
+3. **PyInstaller bundle missing the frontend dist folder.** A release script change broke artifact bundling. The exe started, the Flask app couldn't find static assets, and the user got "static files not found" instead of an update. CI was passing — the smoke test only checked that the process didn't crash within 5 seconds, not that the frontend actually loaded.
+
+Audit results in invoi:
+
+| Bug class | Verdict | Where invoi is protected |
+|---|---|---|
+| Rate as string → TypeError | **Not vulnerable.** Three independent `float()` casts: [`backend/functions/config.py:240`](../backend/functions/config.py) on POST validation, [`backend/functions/submit_weekly.py:435`](../backend/functions/submit_weekly.py), and [`backend/functions/submit_monthly.py:271`](../backend/functions/submit_monthly.py). Frontend also coerces to `Number` before sending. | Defense in depth. |
+| Missing frontend bundle on deploy | **Doesn't apply.** SST `StaticSite` builds the frontend during `sst deploy` and CloudFront isn't updated until the build succeeds. There's no PyInstaller-style bundling step that can silently lose files. | Architectural difference. |
+| Silent 500s / no crash report | **Was partially vulnerable, now mitigated.** Threshold-based CloudWatch alarms (`Lambda Errors > 1%`, `API 5xx > 1%`) existed before this audit, but they're slow on low-volume endpoints — a single failure on a quiet Lambda might not cross the threshold for hours, or ever. **Fix (2026-04-11):** [`backend/services/error_reporter.py`](../backend/services/error_reporter.py) publishes to the alarm SNS topic from inside every `except Exception` branch in `config`, `submit_weekly`, and `submit_monthly`. The publish is best-effort and swallows its own failures so it can never turn a 500 into a crash loop. The threshold alarms are kept as a safety net for the cases the in-handler reporter can't catch (init errors, OOM, timeout). | Per-request reporter is the primary signal; threshold alarms are the backup. |
+| Submit endpoint test coverage gap | **Closed (2026-04-11).** Added [`backend/tests/test_submit_weekly.py::TestRateAsStringRegression`](../backend/tests/test_submit_weekly.py) (4 tests covering string/float/int rate, plus exception-reporter integration) and three string-rate cases in [`backend/tests/test_config.py::TestValidation`](../backend/tests/test_config.py). | A future refactor that drops the `float()` cast will turn the test suite red. |
+
+The 1% threshold on the existing CloudWatch alarms was deliberately *not* tightened during this work. With the per-request SNS reporter publishing on every 500, lowering the threshold would generate noise without adding signal — every catchable failure already pages immediately.
 
 ---
 
