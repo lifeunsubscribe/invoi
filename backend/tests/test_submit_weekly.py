@@ -1068,7 +1068,10 @@ class TestSubmitWeekly:
                         with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
                             with patch('functions.submit_weekly._create_invoice_record', return_value=mock_invoice_metadata):
                                 with patch('functions.submit_weekly.put_invoice') as mock_put_invoice:
-                                    with patch('functions.submit_weekly.s3_client') as mock_s3_client:
+                                    with patch('functions.submit_weekly.get_s3_client') as mock_get_s3_client:
+                                        mock_s3_client = MagicMock()
+                                        mock_get_s3_client.return_value = mock_s3_client
+
                                         # Simulate metadata save failure
                                         mock_put_invoice.side_effect = ClientError(
                                             {'Error': {'Code': 'ServiceUnavailable', 'Message': 'DynamoDB unavailable'}},
@@ -1176,7 +1179,10 @@ class TestSubmitWeekly:
                         with patch('functions.submit_weekly._increment_invoice_counter', return_value=1):
                             with patch('functions.submit_weekly._create_invoice_record', return_value=mock_invoice_metadata):
                                 with patch('functions.submit_weekly.put_invoice') as mock_put_invoice:
-                                    with patch('functions.submit_weekly.s3_client') as mock_s3_client:
+                                    with patch('functions.submit_weekly.get_s3_client') as mock_get_s3_client:
+                                        mock_s3_client = MagicMock()
+                                        mock_get_s3_client.return_value = mock_s3_client
+
                                         # Mock S3 client that fails on delete
                                         mock_s3_client.delete_object.side_effect = ClientError(
                                             {'Error': {'Code': 'AccessDenied', 'Message': 'Access denied'}},

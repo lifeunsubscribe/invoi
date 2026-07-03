@@ -156,7 +156,7 @@ class TestResendHandler:
         }
 
         # Set environment variable
-        os.environ['InvoiStorage'] = 'test-bucket'
+        os.environ['SST_Resource_InvoiStorage_name'] = 'test-bucket'
 
         # Call handler
         response = handler(event, {})
@@ -208,7 +208,7 @@ class TestResendHandler:
             })
         }
 
-        os.environ['InvoiStorage'] = 'test-bucket'
+        os.environ['SST_Resource_InvoiStorage_name'] = 'test-bucket'
 
         # Call handler
         response = handler(event, {})
@@ -307,7 +307,7 @@ class TestResendHandler:
         # Mock invoice not found to get quick response
         mock_get_invoice.return_value = None
 
-        os.environ['InvoiStorage'] = 'test-bucket'
+        os.environ['SST_Resource_InvoiStorage_name'] = 'test-bucket'
 
         response = handler(event, {})
 

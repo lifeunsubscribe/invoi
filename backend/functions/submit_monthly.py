@@ -14,15 +14,12 @@ from services.db_service import query_invoices, get_user, put_invoice, get_invoi
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from services.logging_config import setup_logging
-from services.s3_service import fetch_logo_from_s3, get_bucket_name
+from services.s3_service import fetch_logo_from_s3, get_bucket_name, get_s3_client
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# S3 client for rollback operations
-s3_client = boto3.client('s3')
 
 
 def handler(event, context):
@@ -356,7 +353,7 @@ def handler(event, context):
             logger.warning(f"Rolling back S3 upload by deleting {s3_key}")
 
             try:
-                s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
+                get_s3_client().delete_object(Bucket=bucket_name, Key=s3_key)
                 logger.info(f"Successfully deleted orphaned PDF from S3: {s3_key}")
             except Exception as s3_error:
                 # S3 cleanup also failed - log both errors
