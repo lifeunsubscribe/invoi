@@ -194,7 +194,7 @@ export default $config({
 
     // Phase 2: Test ReportLab layer (temporary endpoint for validation)
     api.route("GET /api/test-reportlab", {
-      handler: "backend/functions/test_reportlab.handler",
+      handler: "backend/functions/reportlab_test_endpoint.handler",
       layers: [reportlabLayer.arn],
       timeout: "10 seconds",
       memory: "512 MB",
@@ -538,7 +538,7 @@ export default $config({
       "scan_month",
       "submit_weekly",
       "submit_monthly",
-      "test_reportlab",
+      "reportlab_test_endpoint",
       "invoices",
       "pdf",
       "export",
