@@ -15,6 +15,7 @@ from services.mail_service import send_weekly_email
 from services.logging_config import setup_logging
 from services.s3_service import fetch_logo_from_s3
 from services.auth_utils import extract_user_id_from_token
+from services.error_reporter import report_exception
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
@@ -445,14 +446,16 @@ def handler(event, context):
             'body': json.dumps({'error': str(e)})
         }
     except ClientError as e:
-        logger.error(f"AWS error in POST /api/submit/weekly: {str(e)}")
+        logger.exception(f"AWS error in POST /api/submit/weekly: {str(e)}")
+        report_exception("submit_weekly", e, event=event, user_id=locals().get('user_id'))
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to generate weekly invoice'})
         }
     except Exception as e:
-        logger.error(f"Unhandled error in submit_weekly handler: {str(e)}")
+        logger.exception(f"Unhandled error in submit_weekly handler: {str(e)}")
+        report_exception("submit_weekly", e, event=event, user_id=locals().get('user_id'))
         return {
             'statusCode': 500,
             'headers': headers,

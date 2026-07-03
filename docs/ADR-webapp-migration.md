@@ -633,7 +633,7 @@ invoi/
 ### Phase 6: Launch Prep
 
 - [ ] Privacy policy and terms of service (required for Google OAuth)
-- [x] Error monitoring (CloudWatch alarms on Lambda errors) *(done — see [.rite/docs/changelog.md](../.rite/docs/changelog.md) 2026-04-05; threshold alarms for Lambda errors >1% and API 5xx >1%)*
+- [x] Error monitoring (CloudWatch alarms on Lambda errors) *(done 2026-04-05; threshold alarms for Lambda errors >1% and API 5xx >1%)*
 - [x] Per-request crash reporting on the critical submit + config paths *(done 2026-04-11; `backend/services/error_reporter.py` publishes to the alarm SNS topic on every 500, so single-user bugs page immediately rather than waiting for the threshold alarm to trip — see "Lessons from invoice-builder" below)*
 - [ ] Rate limiting on API Gateway
 - [ ] Invite 5–10 beta users from contractor communities

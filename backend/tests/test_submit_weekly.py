@@ -1281,3 +1281,158 @@ class TestSubmitWeekly:
                     _increment_invoice_counter(user_id)
 
         assert exc_info.value.response['Error']['Code'] == 'ProvisionedThroughputExceededException'
+
+
+class TestRateAsStringRegression:
+    """
+    Regression guard for the invoice-builder bug where a user config stored
+    `rate` as a string (e.g. "25") and the server multiplied it by a float
+    hours value, raising `TypeError: can't multiply sequence by non-int of
+    type 'float'`. In invoi, rate is coerced at three boundaries (config POST,
+    submit_weekly, submit_monthly) — this suite pins the submit_weekly
+    behavior end-to-end so a future refactor can't silently drop the coercion.
+
+    Note: the original 2026-04-11 source of this class was lost before commit;
+    it was recreated 2026-07-02 from the surviving bytecode, with patch
+    targets updated for the current handler structure
+    (_increment_invoice_counter / _create_invoice_record).
+    """
+
+    def _base_event(self):
+        return {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-rate-str'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'hours': {
+                    'Monday': 8,
+                    'Tuesday': 8,
+                    'Wednesday': 8,
+                    'Thursday': 8,
+                    'Friday': 8,
+                    'Saturday': 0,
+                    'Sunday': 0
+                },
+                'week': {
+                    'start': '2026-03-24',
+                    'end': '2026-03-30',
+                    'invNum': 'INV-20260324'
+                },
+                'clientEmail': 'client@example.com',
+                'accountantEmail': 'accountant@example.com',
+                'saveOnly': True
+            })
+        }
+
+    def _user_with_rate(self, rate):
+        return {
+            'userId': 'user-rate-str',
+            'name': 'Lisa Wadley',
+            'address': '235 Watson Dr',
+            'personalEmail': 'lisa@example.com',
+            'rate': rate,
+            'template': 'garden',
+            'signatureFont': 'Great Vibes',
+            'paymentTerms': 'receipt',
+            'taxEnabled': False,
+            'invoiceNumberConfig': {
+                'prefix': 'INV',
+                'includeYear': False,
+                'separator': '-',
+                'padding': 3,
+                'nextNum': 1
+            },
+            'activeClientId': 'client-1',
+            'clients': [
+                {
+                    'id': 'client-1',
+                    'name': 'Test Client',
+                    'email': 'client@example.com'
+                }
+            ]
+        }
+
+    def _run_handler(self, user):
+        """
+        Execute the handler with the DynamoDB/S3 boundaries mocked out but the
+        real _create_invoice_record math left in place. We capture the Item
+        passed to DynamoDB put_item so we can assert that `rate * hours` was
+        computed successfully — that is the exact step that would have raised
+        `TypeError: can't multiply sequence by non-int of type 'float'` if
+        rate weren't coerced.
+        """
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
+            'SST_Resource_InvoiStorage_name': 'test-bucket'
+        }):
+            with patch('functions.submit_weekly.get_user', return_value=user), \
+                 patch('functions.submit_weekly.generate_weekly_invoice', return_value=mock_pdf_bytes), \
+                 patch('functions.submit_weekly.save_pdf_to_s3'), \
+                 patch('functions.submit_weekly._increment_invoice_counter', return_value=1), \
+                 patch('functions.submit_weekly.put_invoice'), \
+                 patch('functions.submit_weekly.boto3.resource') as mock_resource:
+                mock_table = MagicMock()
+                mock_resource.return_value.Table.return_value = mock_table
+
+                response = handler(self._base_event(), {})
+
+        captured = {}
+        if mock_table.put_item.call_args is not None:
+            item = mock_table.put_item.call_args.kwargs.get('Item', {})
+            captured = {
+                'rate_type_received': type(user['rate']).__name__,
+                'rate_stored': item.get('rate'),
+                'total_pay': float(item.get('totalPay', 0)),
+                'invoice_number': item.get('invoiceNumber')
+            }
+        return response, captured
+
+    def test_submit_weekly_accepts_string_rate(self):
+        """Rate stored as the string '25' must be coerced and produce correct totals."""
+        response, captured = self._run_handler(self._user_with_rate('25'))
+        assert response['statusCode'] == 200, response['body']
+        assert captured['rate_type_received'] == 'str'
+        assert captured['total_pay'] == 1000.0
+
+    def test_submit_weekly_accepts_float_rate(self):
+        """Float rate (the normal path) still works — sanity check."""
+        response, captured = self._run_handler(self._user_with_rate(25.0))
+        assert response['statusCode'] == 200, response['body']
+        assert captured['total_pay'] == 1000.0
+
+    def test_submit_weekly_accepts_int_rate(self):
+        """Integer rate should also be coerced cleanly."""
+        response, captured = self._run_handler(self._user_with_rate(25))
+        assert response['statusCode'] == 200, response['body']
+        assert captured['total_pay'] == 1000.0
+
+    def test_submit_weekly_reports_exception_on_unhandled_error(self):
+        """
+        When an unexpected exception escapes the handler, the SNS reporter
+        must be called so a single failure pages immediately — this is the
+        gap that hid Lisa's invoice-builder bug.
+        """
+        with patch.dict(os.environ, {
+            'USERS_TABLE': 'users-table',
+            'INVOICES_TABLE': 'invoices-table',
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'ALARM_TOPIC_ARN': 'arn:aws:sns:us-east-1:123:Topic'
+        }):
+            with patch('functions.submit_weekly.get_user', side_effect=RuntimeError('db exploded')):
+                with patch('functions.submit_weekly.report_exception') as mock_report:
+                    response = handler(self._base_event(), {})
+
+        assert response['statusCode'] == 500
+        mock_report.assert_called_once()
+        args = mock_report.call_args.args
+        assert args[0] == 'submit_weekly'
+        assert isinstance(args[1], RuntimeError)

@@ -15,6 +15,7 @@ from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from services.logging_config import setup_logging
 from services.s3_service import fetch_logo_from_s3
+from services.error_reporter import report_exception
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
@@ -394,14 +395,16 @@ def handler(event, context):
             'body': json.dumps({'error': 'Invalid JSON in request body'})
         }
     except ClientError as e:
-        logger.error(f"AWS error in POST /api/submit/monthly: {str(e)}")
+        logger.exception(f"AWS error in POST /api/submit/monthly: {str(e)}")
+        report_exception("submit_monthly", e, event=event, user_id=locals().get('user_id'))
         return {
             'statusCode': 500,
             'headers': headers,
             'body': json.dumps({'error': 'Failed to generate monthly report'})
         }
     except Exception as e:
-        logger.error(f"Unhandled error in submit_monthly handler: {str(e)}")
+        logger.exception(f"Unhandled error in submit_monthly handler: {str(e)}")
+        report_exception("submit_monthly", e, event=event, user_id=locals().get('user_id'))
         return {
             'statusCode': 500,
             'headers': headers,
