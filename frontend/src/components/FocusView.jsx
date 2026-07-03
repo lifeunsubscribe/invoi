@@ -89,7 +89,10 @@ export default function FocusView({ invoices, config, onInvoiceClick }) {
         // Sort by weekStart date descending (newest first)
         const dateA = parseDateInLocalTimezone(a.weekStart);
         const dateB = parseDateInLocalTimezone(b.weekStart);
-        if (!dateA || !dateB) return 0;
+        // Handle invalid dates: push them to the end
+        if (!dateA && !dateB) return 0;
+        if (!dateA) return 1; // a goes after b
+        if (!dateB) return -1; // b goes after a
         return dateB.getTime() - dateA.getTime();
       });
   }, [invoices]);
