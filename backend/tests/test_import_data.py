@@ -47,7 +47,9 @@ class TestImportDataCORS:
         }
 
         with patch('functions.import_data.get_user', return_value=mock_user):
-            with patch('functions.import_data.s3_client'):
+            with patch('functions.import_data.get_s3_client') as mock_get_s3:
+                mock_s3 = MagicMock()
+                mock_get_s3.return_value = mock_s3
                 with patch('functions.import_data.put_invoice'):
                     with patch.dict(os.environ, {'SST_Resource_InvoiStorage_name': 'test-bucket'}):
                         response = handler(event, {})

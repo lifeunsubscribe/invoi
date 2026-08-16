@@ -13,16 +13,13 @@ from services.db_service import get_user, put_invoice
 from services.pdf_service import generate_weekly_invoice, save_pdf_to_s3, format_invoice_number, _calculate_due_date
 from services.mail_service import send_weekly_email
 from services.logging_config import setup_logging
-from services.s3_service import fetch_logo_from_s3
+from services.s3_service import fetch_logo_from_s3, get_bucket_name, get_s3_client
 from services.auth_utils import extract_user_id_from_token
 from botocore.exceptions import ClientError
 
 # Configure logging for this Lambda function
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# S3 client for rollback operations
-s3_client = boto3.client('s3')
 
 # Re-export for test imports
 __all__ = ['handler', '_calculate_due_date', '_populate_hours_from_default_shift']
@@ -286,7 +283,15 @@ def handler(event, context):
             }
 
         # Upload PDF to S3 at users/{userId}/weekly/{invoiceId}.pdf
-        bucket_name = os.environ['SST_Resource_InvoiStorage_name']
+        try:
+            bucket_name = get_bucket_name()
+        except ValueError as e:
+            logger.error(f"S3 bucket name not configured: {e}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({'error': 'Storage configuration error'})
+            }
         invoice_id = week['invNum']
         s3_key = f"users/{user_id}/weekly/{invoice_id}.pdf"
 
@@ -372,7 +377,7 @@ def handler(event, context):
             logger.warning(f"Rolling back S3 upload by deleting {s3_key}")
 
             try:
-                s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
+                get_s3_client().delete_object(Bucket=bucket_name, Key=s3_key)
                 logger.info(f"Successfully deleted orphaned PDF from S3: {s3_key}")
             except Exception as s3_error:
                 # S3 cleanup also failed - log both errors
@@ -392,7 +397,7 @@ def handler(event, context):
             logger.warning(f"Rolling back S3 upload by deleting {s3_key}")
 
             try:
-                s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
+                get_s3_client().delete_object(Bucket=bucket_name, Key=s3_key)
                 logger.info(f"Successfully deleted orphaned PDF from S3: {s3_key}")
             except Exception as s3_error:
                 # S3 cleanup also failed - log both errors

@@ -55,11 +55,14 @@ class TestCsvExport:
 
         mock_signed_url = 'https://s3.amazonaws.com/bucket/users/user-123/exports/export-20260404-120000.csv?signature=xyz'
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.export.get_invoice', side_effect=[mock_invoice_1, mock_invoice_2]):
-                with patch('functions.export.s3_client.put_object') as mock_put:
-                    with patch('functions.export.s3_client.generate_presigned_url', return_value=mock_signed_url):
-                        response = handler(event, {})
+        with patch('functions.export.get_invoice', side_effect=[mock_invoice_1, mock_invoice_2]):
+            with patch('functions.export.get_s3_client') as mock_get_s3:
+                with patch('functions.export.get_bucket_name', return_value='test-bucket'):
+                    mock_s3 = MagicMock()
+                    mock_s3.put_object.return_value = {}
+                    mock_s3.generate_presigned_url.return_value = mock_signed_url
+                    mock_get_s3.return_value = mock_s3
+                    response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -96,15 +99,18 @@ class TestCsvExport:
             'status': 'paid'
         }
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.export.get_invoice', return_value=mock_invoice):
-                with patch('functions.export.s3_client.put_object') as mock_put:
-                    with patch('functions.export.s3_client.generate_presigned_url', return_value='https://url'):
-                        response = handler(event, {})
+        with patch('functions.export.get_invoice', return_value=mock_invoice):
+            with patch('functions.export.get_s3_client') as mock_get_s3:
+                with patch('functions.export.get_bucket_name', return_value='test-bucket'):
+                    mock_s3 = MagicMock()
+                    mock_s3.put_object.return_value = {}
+                    mock_s3.generate_presigned_url.return_value = 'https://url'
+                    mock_get_s3.return_value = mock_s3
+                    response = handler(event, {})
 
         # Verify S3 upload was called with correct content type
-        mock_put.assert_called_once()
-        call_kwargs = mock_put.call_args[1]
+        mock_s3.put_object.assert_called_once()
+        call_kwargs = mock_s3.put_object.call_args[1]
         assert call_kwargs['ContentType'] == 'text/csv'
         assert 'invoices-' in call_kwargs['ContentDisposition']
         assert '.csv' in call_kwargs['ContentDisposition']
@@ -137,14 +143,17 @@ class TestCsvExport:
             'status': 'paid'
         }
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.export.get_invoice', return_value=mock_invoice):
-                with patch('functions.export.s3_client.put_object') as mock_put:
-                    with patch('functions.export.s3_client.generate_presigned_url', return_value='https://url'):
-                        response = handler(event, {})
+        with patch('functions.export.get_invoice', return_value=mock_invoice):
+            with patch('functions.export.get_s3_client') as mock_get_s3:
+                with patch('functions.export.get_bucket_name', return_value='test-bucket'):
+                    mock_s3 = MagicMock()
+                    mock_s3.put_object.return_value = {}
+                    mock_s3.generate_presigned_url.return_value = 'https://url'
+                    mock_get_s3.return_value = mock_s3
+                    response = handler(event, {})
 
         # Verify CSV content
-        csv_content = mock_put.call_args[1]['Body'].decode('utf-8')
+        csv_content = mock_s3.put_object.call_args[1]['Body'].decode('utf-8')
         lines = csv_content.strip().split('\n')
 
         # Check header
@@ -189,12 +198,15 @@ class TestZipExport:
         mock_pdf_data = b'%PDF-1.4 mock pdf content'
         mock_signed_url = 'https://s3.amazonaws.com/bucket/users/user-123/exports/export-20260404-120000.zip?signature=xyz'
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.export.get_invoice', return_value=mock_invoice):
-                with patch('functions.export.s3_client.get_object', return_value={'Body': MagicMock(read=lambda: mock_pdf_data)}):
-                    with patch('functions.export.s3_client.put_object'):
-                        with patch('functions.export.s3_client.generate_presigned_url', return_value=mock_signed_url):
-                            response = handler(event, {})
+        with patch('functions.export.get_invoice', return_value=mock_invoice):
+            with patch('functions.export.get_s3_client') as mock_get_s3:
+                with patch('functions.export.get_bucket_name', return_value='test-bucket'):
+                    mock_s3 = MagicMock()
+                    mock_s3.get_object.return_value = {'Body': MagicMock(read=lambda: mock_pdf_data)}
+                    mock_s3.put_object.return_value = {}
+                    mock_s3.generate_presigned_url.return_value = mock_signed_url
+                    mock_get_s3.return_value = mock_s3
+                    response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -237,12 +249,15 @@ class TestZipExport:
                 return {'Body': MagicMock(read=lambda: mock_log_data)}
             return {'Body': MagicMock(read=lambda: mock_pdf_data)}
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.export.get_invoice', return_value=mock_invoice):
-                with patch('functions.export.s3_client.get_object', side_effect=mock_get_object):
-                    with patch('functions.export.s3_client.put_object'):
-                        with patch('functions.export.s3_client.generate_presigned_url', return_value='https://url'):
-                            response = handler(event, {})
+        with patch('functions.export.get_invoice', return_value=mock_invoice):
+            with patch('functions.export.get_s3_client') as mock_get_s3:
+                with patch('functions.export.get_bucket_name', return_value='test-bucket'):
+                    mock_s3 = MagicMock()
+                    mock_s3.get_object.side_effect = mock_get_object
+                    mock_s3.put_object.return_value = {}
+                    mock_s3.generate_presigned_url.return_value = 'https://url'
+                    mock_get_s3.return_value = mock_s3
+                    response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -272,8 +287,8 @@ class TestZipExport:
             # No pdfKey or logPdfKey
         }
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.export.get_invoice', return_value=mock_invoice):
+        with patch('functions.export.get_invoice', return_value=mock_invoice):
+            with patch('functions.export.get_bucket_name', return_value='test-bucket'):
                 response = handler(event, {})
 
         assert response['statusCode'] == 404
@@ -306,16 +321,19 @@ class TestZipExport:
 
         mock_pdf_data = b'%PDF-1.4 mock pdf'
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.export.get_invoice', return_value=mock_invoice):
-                with patch('functions.export.s3_client.get_object', return_value={'Body': MagicMock(read=lambda: mock_pdf_data)}):
-                    with patch('functions.export.s3_client.put_object') as mock_put:
-                        with patch('functions.export.s3_client.generate_presigned_url', return_value='https://url'):
-                            response = handler(event, {})
+        with patch('functions.export.get_invoice', return_value=mock_invoice):
+            with patch('functions.export.get_s3_client') as mock_get_s3:
+                with patch('functions.export.get_bucket_name', return_value='test-bucket'):
+                    mock_s3 = MagicMock()
+                    mock_s3.get_object.return_value = {'Body': MagicMock(read=lambda: mock_pdf_data)}
+                    mock_s3.put_object.return_value = {}
+                    mock_s3.generate_presigned_url.return_value = 'https://url'
+                    mock_get_s3.return_value = mock_s3
+                    response = handler(event, {})
 
         # Verify S3 upload was called with correct content type
-        mock_put.assert_called_once()
-        call_kwargs = mock_put.call_args[1]
+        mock_s3.put_object.assert_called_once()
+        call_kwargs = mock_s3.put_object.call_args[1]
         assert call_kwargs['ContentType'] == 'application/zip'
         assert 'invoices-' in call_kwargs['ContentDisposition']
         assert '.zip' in call_kwargs['ContentDisposition']
@@ -373,12 +391,15 @@ class TestZipExport:
                 return {'Body': MagicMock(read=lambda: mock_pdf_data)}
             return {'Body': MagicMock(read=lambda: mock_pdf_data)}
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.export.get_invoice', side_effect=[mock_invoice_1, mock_invoice_2]):
-                with patch('functions.export.s3_client.get_object', side_effect=mock_get_object):
-                    with patch('functions.export.s3_client.put_object'):
-                        with patch('functions.export.s3_client.generate_presigned_url', return_value='https://url'):
-                            response = handler(event, {})
+        with patch('functions.export.get_invoice', side_effect=[mock_invoice_1, mock_invoice_2]):
+            with patch('functions.export.get_s3_client') as mock_get_s3:
+                with patch('functions.export.get_bucket_name', return_value='test-bucket'):
+                    mock_s3 = MagicMock()
+                    mock_s3.get_object.side_effect = mock_get_object
+                    mock_s3.put_object.return_value = {}
+                    mock_s3.generate_presigned_url.return_value = 'https://url'
+                    mock_get_s3.return_value = mock_s3
+                    response = handler(event, {})
 
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -644,11 +665,13 @@ class TestCORS:
             'totalPay': 1000.00
         }
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.export.get_invoice', return_value=mock_invoice):
-                with patch('functions.export.s3_client') as mock_s3:
+        with patch('functions.export.get_invoice', return_value=mock_invoice):
+            with patch('functions.export.get_s3_client') as mock_get_s3:
+                with patch('functions.export.get_bucket_name', return_value='test-bucket'):
+                    mock_s3 = MagicMock()
                     mock_s3.put_object.return_value = {}
                     mock_s3.generate_presigned_url.return_value = 'https://s3.amazonaws.com/signed-url'
+                    mock_get_s3.return_value = mock_s3
                     response = handler(event, {})
 
         assert response['statusCode'] == 200
@@ -695,9 +718,12 @@ class TestErrorHandling:
             'PutObject'
         )
 
-        with patch.dict(os.environ, {'InvoiStorage': 'test-bucket'}):
-            with patch('functions.export.get_invoice', return_value=mock_invoice):
-                with patch('functions.export.s3_client.put_object', side_effect=mock_error):
+        with patch('functions.export.get_invoice', return_value=mock_invoice):
+            with patch('functions.export.get_s3_client') as mock_get_s3:
+                with patch('functions.export.get_bucket_name', return_value='test-bucket'):
+                    mock_s3 = MagicMock()
+                    mock_s3.put_object.side_effect = mock_error
+                    mock_get_s3.return_value = mock_s3
                     response = handler(event, {})
 
         assert response['statusCode'] == 500
@@ -727,8 +753,8 @@ class TestErrorHandling:
             'invoiceId': 'INV-001'
         }
 
-        with patch.dict(os.environ, {}, clear=True):
-            with patch('functions.export.get_invoice', return_value=mock_invoice):
+        with patch('functions.export.get_invoice', return_value=mock_invoice):
+            with patch('functions.export.get_bucket_name', side_effect=ValueError("SST_Resource_InvoiStorage_name environment variable must be set")):
                 response = handler(event, {})
 
         assert response['statusCode'] == 500
