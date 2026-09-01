@@ -10,7 +10,7 @@ import boto3
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from services.db_service import query_invoices, get_user, put_invoice, get_invoice
+from services.db_service import query_invoices, get_user, get_invoice, put_invoice
 from services.pdf_service import generate_monthly_report, save_pdf_to_s3
 from services.mail_service import send_monthly_email
 from services.logging_config import setup_logging

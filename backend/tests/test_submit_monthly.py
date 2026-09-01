@@ -458,6 +458,89 @@ class TestSubmitMonthly:
         mock_save_pdf.assert_called_once()
         mock_put_invoice.assert_called_once()
 
+    def test_submit_monthly_metadata_save_failure_after_email_send(self):
+        """POST with successful email but metadata save failure should return 500 error and rollback S3"""
+        event = {
+            'requestContext': {
+                'http': {'method': 'POST'},
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'sub': 'user-123'}
+                    }
+                }
+            },
+            'headers': {'Authorization': 'Bearer valid-token'},
+            'body': json.dumps({
+                'year': 2026,
+                'month': 3,
+                'send': True,
+                'accountantEmail': 'accountant@example.com'
+            })
+        }
+
+        # Mock user config
+        mock_user = {
+            'userId': 'user-123',
+            'name': 'Test User',
+            'rate': 28.00,
+            'template': 'morning-light',
+            'signatureFont': 'Dancing Script'
+        }
+
+        # Mock weekly invoices
+        mock_weekly_invoices = [
+            {
+                'invoiceId': 'INV-20260301',
+                'weekStart': '2026-03-01',
+                'weekEnd': '2026-03-07',
+                'totalHours': 40
+            }
+        ]
+
+        # Mock PDF generation
+        mock_pdf_bytes = b'%PDF-1.4\nMock PDF content'
+
+        # Mock ClientError for metadata save failure
+        mock_client_error = ClientError(
+            {'Error': {'Code': 'ConditionalCheckFailedException', 'Message': 'Save failed'}},
+            'PutItem'
+        )
+
+        with patch.dict(os.environ, {
+            'SST_Resource_InvoiStorage_name': 'test-bucket',
+            'INVOICES_TABLE': 'invoices-table'
+        }):
+            with patch('functions.submit_monthly.get_user', return_value=mock_user):
+                with patch('functions.submit_monthly.get_invoice', return_value=None):
+                    with patch('functions.submit_monthly.query_invoices', return_value=mock_weekly_invoices):
+                        with patch('functions.submit_monthly.generate_monthly_report', return_value=mock_pdf_bytes):
+                            with patch('functions.submit_monthly.save_pdf_to_s3'):
+                                # Metadata save (put_invoice) fails - using single consolidated write pattern
+                                with patch('functions.submit_monthly.put_invoice', side_effect=mock_client_error) as mock_put_invoice:
+                                    with patch('functions.submit_monthly.send_monthly_email') as mock_send_email:
+                                        with patch('functions.submit_monthly.s3_client') as mock_s3_client:
+                                            response = handler(event, {})
+
+        # Should return 500 error since metadata save failed (even though email succeeded)
+        assert response['statusCode'] == 500
+        body = json.loads(response['body'])
+
+        # Verify error message
+        assert 'error' in body
+        assert 'metadata' in body['error'].lower()
+
+        # Verify email was sent (before metadata save failure)
+        mock_send_email.assert_called_once()
+
+        # Verify put_invoice called once (single consolidated write that failed)
+        assert mock_put_invoice.call_count == 1
+
+        # Verify S3 rollback was attempted (delete_object called to clean up orphaned PDF)
+        mock_s3_client.delete_object.assert_called_once_with(
+            Bucket='test-bucket',
+            Key='users/user-123/reports/RPT-2026-03.pdf'
+        )
+
     def test_lambda_response_has_no_cors_headers(self):
         """Lambda responses should not include CORS headers (API Gateway handles them)"""
         event = {
